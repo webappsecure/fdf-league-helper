@@ -84,6 +84,32 @@ test("shows validation errors and keeps the entered values", async ({ page }) =>
   await expect(page).toHaveURL(/\/leagues\/new$/);
 });
 
+test("drops division errors when a row is removed, and keeps the others", async ({ page }) => {
+  await page.goto("/leagues/new");
+  await page.getByLabel("Number of teams").fill("8");
+  await page.getByLabel("Divisions", { exact: true }).check();
+  await page.getByRole("button", { name: "Add division" }).click();
+  await page.getByRole("button", { name: "Add division" }).click();
+  await page.getByLabel("Teams", { exact: true }).nth(0).fill("4");
+  await page.getByLabel("Division name").nth(1).fill("West");
+  await page.getByLabel("Teams", { exact: true }).nth(1).fill("4");
+  await page.getByRole("button", { name: "Create league" }).click();
+
+  const summary = page.getByRole("main").getByRole("alert");
+  await expect(summary.getByRole("listitem")).toHaveCount(2);
+  await expect(page.getByLabel("Division name").nth(0)).toHaveAttribute("aria-invalid", "true");
+  await expect(page.locator('[id="error-divisions.0.name"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "Remove division 1" }).click();
+
+  // The row that was second is now first. It was never in error.
+  await expect(page.getByLabel("Division name")).toHaveValue("West");
+  await expect(page.getByLabel("Division name")).toHaveAttribute("aria-invalid", "false");
+  await expect(page.locator('[id="error-divisions.0.name"]')).toHaveCount(0);
+  await expect(summary.getByRole("listitem")).toHaveText(["League name is required."]);
+  await expect(page.getByLabel("League name")).toHaveAttribute("aria-invalid", "true");
+});
+
 test("keeps the chosen radio options after a failed submit", async ({ page }) => {
   await page.goto("/leagues/new");
 

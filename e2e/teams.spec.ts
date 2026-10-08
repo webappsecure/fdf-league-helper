@@ -287,3 +287,63 @@ test("clears a color error when the saved color is chosen again", async ({ page,
   await expect(team.primary).not.toHaveAttribute("aria-invalid");
   await expect(team.secondary).not.toHaveAttribute("aria-invalid");
 });
+
+test("saves the original value again when it is retyped during a save", async ({ page }) => {
+  await createLeague(page, "Revert League");
+  const team = firstTeam(page);
+  const original = await team.city.inputValue();
+
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/leagues/*", async (route) => {
+    if (route.request().method() === "POST") await held;
+    await route.continue();
+  });
+
+  await team.city.fill("Alpha");
+  await team.city.press("Enter");
+  await expect(team.row.locator('[aria-busy="true"]')).toHaveCount(1);
+  await team.city.fill(original);
+  await team.city.blur();
+
+  release();
+  await expect(team.row.locator('[aria-busy="true"]')).toHaveCount(0);
+  await expect(team.city).toHaveValue(original);
+  await expect(team.city).toHaveAccessibleName(
+    `${original} ${await team.nickname.inputValue()} city`,
+  );
+  await page.reload();
+  await expect(team.city).toHaveValue(original);
+});
+
+test("re-rolls a cell clicked straight after typing in it", async ({ page }) => {
+  await createLeague(page, "Quick League");
+  const team = firstTeam(page);
+  const original = await team.city.inputValue();
+
+  await team.city.fill("Zed");
+  await team.row.getByRole("button", { name: /^Re-roll city for/ }).click();
+
+  await expect(team.city).not.toHaveValue("Zed");
+  await expect(team.city).not.toHaveValue(original);
+  const rolled = await team.city.inputValue();
+  await page.reload();
+  await expect(team.city).toHaveValue(rolled);
+});
+
+test("saves text typed in one cell when another cell is re-rolled", async ({ page }) => {
+  await createLeague(page, "Neighbor League");
+  const team = firstTeam(page);
+  const neighbor = page.getByRole("table").getByRole("row").nth(2);
+  const neighborNickname = neighbor.getByRole("textbox").nth(1);
+  const before = await neighborNickname.inputValue();
+
+  await team.city.fill("Typed Town");
+  await neighbor.getByRole("button", { name: /^Re-roll nickname for/ }).click();
+  await expect(neighborNickname).not.toHaveValue(before);
+
+  await page.reload();
+  await expect(team.city).toHaveValue("Typed Town");
+});

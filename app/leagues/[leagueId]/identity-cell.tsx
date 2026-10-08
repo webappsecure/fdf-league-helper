@@ -31,15 +31,17 @@ function useCellAction() {
 }
 
 // What is typed in the input. It follows the saved value whenever that changes,
-// which is how a re-roll or a trimmed save shows up. While a typed save is in
-// flight, `submitted` is the text that was sent: if the input has moved on from
-// it by the time the save lands, the newer text is kept.
+// which is how a re-roll shows up. While typed text is being saved, `submitted`
+// is the text that was sent, and the input only takes the saved value when it
+// is that same text coming back (trimmed). Anything typed since is kept.
 function useDraft(saved: string, submitted: string | null = null) {
   const [draft, setDraft] = useState(saved);
   const [lastSaved, setLastSaved] = useState(saved);
   if (saved !== lastSaved) {
     setLastSaved(saved);
-    if (submitted === null || draft === submitted) setDraft(saved);
+    if (submitted === null || (draft === submitted && saved === submitted.trim())) {
+      setDraft(saved);
+    }
   }
   return [draft, setDraft] as const;
 }
@@ -63,6 +65,15 @@ function RerollButton({
       aria-label={label}
       title="Re-roll"
       disabled={pending}
+      // When focus is in this button's own cell, keep it there. Otherwise the
+      // press would blur the cell's text input, start a save of its typed text
+      // and disable this button before the click lands. Focus in any other cell
+      // moves as usual, so that cell saves what was typed in it.
+      onMouseDown={(event) => {
+        if (event.currentTarget.parentElement?.contains(document.activeElement)) {
+          event.preventDefault();
+        }
+      }}
       onClick={() => run(() => rerollTeamFieldAction(teamId, field))}
       className="shrink-0 rounded border border-border-strong p-1 hover:bg-hover disabled:opacity-60"
     >
@@ -110,13 +121,16 @@ export function TextCell({
   const [draft, setDraft] = useDraft(value, submitted);
 
   function save() {
-    if (draft.trim() === value) {
+    if (pending && submitted !== null) {
+      // The page still shows the old saved value, so compare with the text on
+      // its way instead. The same text is not sent twice, and anything else,
+      // including the old value typed back in, is saved in turn.
+      if (draft.trim() === submitted.trim()) return;
+    } else if (draft.trim() === value) {
       setDraft(value);
       setError(null);
       return;
     }
-    // Enter followed by leaving the cell would otherwise send the same text twice.
-    if (pending && draft === submitted) return;
     setSubmitted(draft);
     run(() => updateTeamFieldAction(teamId, field, draft));
   }
