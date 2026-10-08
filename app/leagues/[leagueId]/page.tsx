@@ -3,8 +3,13 @@ import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { getLeague } from "@/lib/leagues";
+import { getGenerationRun } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
+import { ActionButton } from "./action-button";
+import { generateLeagueAction } from "./actions";
 import { DeleteLeague } from "./delete-league";
+import { ManagementTables } from "./management-table";
+import { RunLog } from "./run-log";
 import { TeamTables } from "./team-table";
 
 async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }> }) {
@@ -14,6 +19,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
   if (!league) notFound();
 
   const teams = listTeams(getDb(), league.id);
+  const run = getGenerationRun(getDb(), league.id);
 
   return (
     <>
@@ -32,6 +38,34 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         <h2 className="text-lg font-semibold">Teams</h2>
         <TeamTables league={league} teams={teams} />
       </section>
+
+      {!run && teams.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Generate league</h2>
+          <p className="mt-1 text-muted">
+            Rolls ownership, front office and head coach grades, and Franchise Points for
+            every team.
+          </p>
+          <ActionButton
+            action={generateLeagueAction.bind(null, league.id)}
+            label="Generate league"
+            pendingLabel="Generating..."
+          />
+        </section>
+      )}
+
+      {run && (
+        <>
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Management</h2>
+            <ManagementTables league={league} teams={teams} />
+          </section>
+          <section className="mt-8">
+            <h2 className="text-lg font-semibold">Generation log</h2>
+            <RunLog entries={run.entries} />
+          </section>
+        </>
+      )}
 
       <section className="mt-10 border-t border-border pt-6">
         <DeleteLeague leagueId={league.id} name={league.name} />

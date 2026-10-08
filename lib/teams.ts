@@ -8,19 +8,36 @@ import {
   type Identity,
   type RerollField,
 } from "@/lib/identity";
+import type {
+  Grade,
+  OwnershipLoyalty,
+  OwnershipStyle,
+} from "@/lib/reference/management-tables";
 
 export type Team = Identity & {
   id: number;
+  franchiseId: number;
   divisionId: number | null;
   position: number;
+  // Rule-generated. All four are null until the league is generated, and the
+  // ownership pair stays null for a team that rolled no quality.
+  ownershipStyle: OwnershipStyle | null;
+  ownershipLoyalty: OwnershipLoyalty | null;
+  frontOfficeGrade: Grade | null;
+  headCoachGrade: Grade | null;
 };
 
 const TEAM_SELECT = `
-  SELECT team_season.id AS id, team_season.division_id AS divisionId,
+  SELECT team_season.id AS id, team_season.franchise_id AS franchiseId,
+         team_season.division_id AS divisionId,
          team_season.position AS position, team_season.city AS city,
          team_season.nickname AS nickname, team_season.head_coach_name AS headCoachName,
          team_season.primary_color AS primaryColor,
-         team_season.secondary_color AS secondaryColor
+         team_season.secondary_color AS secondaryColor,
+         team_season.ownership_style AS ownershipStyle,
+         team_season.ownership_loyalty AS ownershipLoyalty,
+         team_season.front_office_grade AS frontOfficeGrade,
+         team_season.head_coach_grade AS headCoachGrade
   FROM team_season
 `;
 

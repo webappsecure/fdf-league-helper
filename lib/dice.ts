@@ -9,6 +9,23 @@ export function ascendingKey(a: Die, b: Die): string {
   return a <= b ? `${a}-${b}` : `${b}-${a}`;
 }
 
+export function rollD6(rng: Rng): Die {
+  return (Math.floor(rng() * 6) + 1) as Die;
+}
+
+// A repeatable random source (mulberry32) over an unsigned 32-bit seed, so a
+// run can be replayed from its stored seed. Not for anything secret.
+export function seededRng(seed: number): Rng {
+  let state = seed >>> 0;
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let mixed = state;
+    mixed = Math.imul(mixed ^ (mixed >>> 15), mixed | 1);
+    mixed ^= mixed + Math.imul(mixed ^ (mixed >>> 7), mixed | 61);
+    return ((mixed ^ (mixed >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 // 2d10 read as tens then ones, 1 to 100. A roll of 0 and 0 is 100.
 export function rollD100(rng: Rng): number {
   const tens = Math.floor(rng() * 10);

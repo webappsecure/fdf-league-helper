@@ -60,6 +60,34 @@ const MIGRATIONS: string[] = [
     UNIQUE (season_id, position)
   );
   `,
+  `
+  ALTER TABLE team_season ADD COLUMN ownership_style TEXT
+    CHECK (ownership_style IN ('MEDDLING', 'SAVVY'));
+  ALTER TABLE team_season ADD COLUMN ownership_loyalty TEXT
+    CHECK (ownership_loyalty IN ('SELFISH', 'LOYAL'));
+  ALTER TABLE team_season ADD COLUMN front_office_grade TEXT
+    CHECK (front_office_grade IN ('A', 'B', 'C', 'D', 'F'));
+  ALTER TABLE team_season ADD COLUMN head_coach_grade TEXT
+    CHECK (head_coach_grade IN ('A', 'B', 'C', 'D', 'F'));
+
+  CREATE TABLE run (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+    kind TEXT NOT NULL CHECK (kind IN ('generation', 'offseason')),
+    seed INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+  );
+
+  CREATE TABLE run_log_entry (
+    id INTEGER PRIMARY KEY,
+    run_id INTEGER NOT NULL REFERENCES run (id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    step TEXT NOT NULL,
+    franchise_id INTEGER REFERENCES franchise (id) ON DELETE CASCADE,
+    message TEXT NOT NULL,
+    UNIQUE (run_id, position)
+  );
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

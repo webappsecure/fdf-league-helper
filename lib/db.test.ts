@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb, openDatabase, transaction } from "@/lib/db";
 import { getLeague } from "@/lib/leagues";
+import { generateLeague } from "@/lib/runs";
 import { fillTeams, listTeams } from "@/lib/teams";
 
 let dir: string;
@@ -35,6 +36,8 @@ describe("openDatabase", () => {
       "division",
       "franchise",
       "league",
+      "run",
+      "run_log_entry",
       "season",
       "team_season",
     ]);
@@ -50,8 +53,85 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(2);
-    expect(tableNames(file)).toHaveLength(6);
+    expect(user_version).toBe(3);
+    expect(tableNames(file)).toHaveLength(8);
+  });
+
+  it("upgrades a database from before management rolls and keeps its teams", () => {
+    const file = path.join(dir, "v2.sqlite");
+    // The team table exactly as migration 2 left it, with one team in it.
+    const old = new DatabaseSync(file);
+    old.exec(`
+      CREATE TABLE league (id INTEGER PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE season (
+        id INTEGER PRIMARY KEY,
+        league_id INTEGER NOT NULL REFERENCES league (id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        xp_kick_distance INTEGER NOT NULL CHECK (xp_kick_distance IN (2, 15)),
+        status TEXT NOT NULL CHECK (status IN ('setup', 'draft', 'accepted')),
+        team_count INTEGER NOT NULL CHECK (team_count BETWEEN 8 AND 56),
+        UNIQUE (league_id, sequence)
+      );
+      CREATE TABLE conference (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL
+      );
+      CREATE TABLE division (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        conference_id INTEGER REFERENCES conference (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        team_count INTEGER NOT NULL CHECK (team_count >= 1)
+      );
+      CREATE TABLE franchise (
+        id INTEGER PRIMARY KEY,
+        league_id INTEGER NOT NULL REFERENCES league (id) ON DELETE CASCADE,
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+      );
+      CREATE TABLE team_season (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        franchise_id INTEGER NOT NULL REFERENCES franchise (id) ON DELETE CASCADE,
+        division_id INTEGER REFERENCES division (id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        city TEXT NOT NULL,
+        nickname TEXT NOT NULL,
+        head_coach_name TEXT NOT NULL,
+        primary_color TEXT NOT NULL,
+        secondary_color TEXT NOT NULL,
+        UNIQUE (season_id, franchise_id),
+        UNIQUE (season_id, position)
+      );
+      INSERT INTO league (id, name, created_at) VALUES (1, 'Old League', '2026-01-01T00:00:00.000Z');
+      INSERT INTO season (id, league_id, sequence, label, xp_kick_distance, status, team_count)
+        VALUES (1, 1, 1, 'Season 1', 2, 'setup', 8);
+      INSERT INTO franchise (id, league_id) VALUES (1, 1);
+      INSERT INTO team_season (season_id, franchise_id, position, city, nickname,
+                               head_coach_name, primary_color, secondary_color)
+        VALUES (1, 1, 0, 'Chicago', 'Aces', 'Adam Adams', '#000000', '#ffffff');
+      PRAGMA user_version = 2;
+    `);
+    old.close();
+
+    const db = openDatabase(file);
+
+    expect(listTeams(db, 1)).toEqual([
+      expect.objectContaining({
+        city: "Chicago",
+        franchiseId: 1,
+        ownershipStyle: null,
+        ownershipLoyalty: null,
+        frontOfficeGrade: null,
+        headCoachGrade: null,
+      }),
+    ]);
+    expect(generateLeague(db, 1, 7).ok).toBe(true);
+    expect(listTeams(db, 1)[0].frontOfficeGrade).not.toBeNull();
+    db.close();
   });
 
   it("upgrades a database from before teams existed and keeps its leagues", () => {
@@ -135,6 +215,7 @@ describe("getDb", () => {
 
       expect(db).toBe(kept);
       expect(db.prepare("SELECT COUNT(*) AS total FROM team_season").get()).toEqual({ total: 0 });
+      expect(db.prepare("SELECT COUNT(*) AS total FROM run").get()).toEqual({ total: 0 });
     } finally {
       delete globalForDb.fdfDatabase;
       kept.close();

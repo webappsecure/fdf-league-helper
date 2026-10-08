@@ -4,6 +4,7 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => ({})) }));
 vi.mock("@/lib/leagues", () => ({ deleteLeague: vi.fn() }));
+vi.mock("@/lib/runs", () => ({ generateLeague: vi.fn() }));
 vi.mock("@/lib/teams", () => ({
   fillTeams: vi.fn(),
   rerollTeamField: vi.fn(),
@@ -13,10 +14,12 @@ vi.mock("@/lib/teams", () => ({
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { deleteLeague } from "@/lib/leagues";
+import { generateLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField, type Team } from "@/lib/teams";
 import {
   deleteLeagueAction,
   fillTeamsAction,
+  generateLeagueAction,
   rerollTeamFieldAction,
   updateTeamFieldAction,
 } from "./actions";
@@ -27,6 +30,7 @@ const BAD_IDS = [0, -1, 1.5, Number.NaN, "7", null, undefined] as unknown as num
 
 const team: Team = {
   id: 7,
+  franchiseId: 7,
   divisionId: null,
   position: 0,
   city: "Chicago",
@@ -34,6 +38,10 @@ const team: Team = {
   headCoachName: "Adam Adams",
   primaryColor: "#000000",
   secondaryColor: "#ffffff",
+  ownershipStyle: null,
+  ownershipLoyalty: null,
+  frontOfficeGrade: null,
+  headCoachGrade: null,
 };
 
 function failing(): never {
@@ -191,6 +199,44 @@ describe("fillTeamsAction", () => {
 
     expect(await fillTeamsAction(3)).toEqual({ success: true });
     expect(fillTeams).toHaveBeenCalledWith({}, 3, Math.random);
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+});
+
+describe("generateLeagueAction", () => {
+  const LEAGUE_NOT_FOUND = { success: false, error: "That league could not be found." };
+
+  it.each(BAD_IDS)("rejects the league id %j", async (id) => {
+    expect(await generateLeagueAction(id)).toEqual(LEAGUE_NOT_FOUND);
+    expect(generateLeague).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not-found", "That league could not be found."],
+    ["no-teams", "Fill in teams before generating the league."],
+    ["already-generated", "This league has already been generated."],
+  ] as const)("explains the %s result without refreshing the page", async (reason, error) => {
+    vi.mocked(generateLeague).mockReturnValue({ ok: false, reason });
+
+    expect(await generateLeagueAction(3)).toEqual({ success: false, error });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hides a database failure behind a generic message", async () => {
+    vi.mocked(generateLeague).mockImplementation(failing);
+
+    expect(await generateLeagueAction(3)).toEqual(SAVE_FAILED);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("generates with a whole 32-bit seed and refreshes the league page", async () => {
+    vi.mocked(generateLeague).mockReturnValue({ ok: true, runId: 1 });
+
+    expect(await generateLeagueAction(3)).toEqual({ success: true });
+    const [, leagueId, seed] = vi.mocked(generateLeague).mock.calls[0];
+    expect(leagueId).toBe(3);
+    expect(Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32).toBe(true);
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
   });
 });

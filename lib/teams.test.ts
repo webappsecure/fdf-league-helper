@@ -53,6 +53,16 @@ describe("teams created with a league", () => {
 
     expect(teams.map((team) => team.position)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
     expect(teams.every((team) => team.divisionId === null)).toBe(true);
+    expect(new Set(teams.map((team) => team.franchiseId)).size).toBe(10);
+    expect(
+      teams.every(
+        (team) =>
+          team.ownershipStyle === null &&
+          team.ownershipLoyalty === null &&
+          team.frontOfficeGrade === null &&
+          team.headCoachGrade === null,
+      ),
+    ).toBe(true);
     expect(teams.every((team) => team.city && team.nickname && team.headCoachName)).toBe(true);
     expect(count("franchise")).toBe(10);
     expect(db.prepare("SELECT DISTINCT league_id AS id, active FROM franchise").all()).toEqual([

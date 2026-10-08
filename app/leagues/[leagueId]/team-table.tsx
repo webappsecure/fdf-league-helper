@@ -1,7 +1,9 @@
-import type { DivisionDetail, LeagueDetail } from "@/lib/leagues";
+import type { LeagueDetail } from "@/lib/leagues";
 import type { Team } from "@/lib/teams";
-import { FillTeams } from "./fill-teams";
+import { ActionButton } from "./action-button";
+import { fillTeamsAction } from "./actions";
 import { ColorsCell, TextCell } from "./identity-cell";
+import { LeagueGroups } from "./league-groups";
 
 function TeamTable({ caption, teams }: { caption: string; teams: Team[] }) {
   return (
@@ -63,54 +65,31 @@ function TeamTable({ caption, teams }: { caption: string; teams: Team[] }) {
   );
 }
 
-function Division({ division, teams }: { division: DivisionDetail; teams: Team[] }) {
-  const members = teams.filter((team) => team.divisionId === division.id);
-  return (
-    <div className="mt-4">
-      <p className="flex justify-between">
-        <span className="font-medium">{division.name}</span>
-        <span className="text-muted">{division.teamCount} teams</span>
-      </p>
-      <TeamTable caption={`${division.name} teams`} teams={members} />
-    </div>
-  );
-}
-
 export function TeamTables({ league, teams }: { league: LeagueDetail; teams: Team[] }) {
   if (teams.length === 0) {
     return (
       <div className="mt-1">
         <p className="text-muted">This league has no teams yet.</p>
-        <FillTeams leagueId={league.id} />
+        <ActionButton
+          action={fillTeamsAction.bind(null, league.id)}
+          label="Fill in teams"
+          pendingLabel="Filling in teams..."
+        />
       </div>
     );
   }
 
   const hasStructure = league.conferences.length > 0 || league.divisions.length > 0;
-  if (!hasStructure) {
-    return (
-      <>
+  return (
+    <>
+      {!hasStructure && (
         <p className="mt-1 text-muted">
           {league.teamCount} teams with no conferences or divisions.
         </p>
-        <TeamTable caption={`${league.name} teams`} teams={teams} />
-      </>
-    );
-  }
-
-  return (
-    <>
-      {league.conferences.map((conference) => (
-        <div key={conference.id} className="mt-6">
-          <h3 className="text-base font-semibold">{conference.name}</h3>
-          {conference.divisions.map((division) => (
-            <Division key={division.id} division={division} teams={teams} />
-          ))}
-        </div>
-      ))}
-      {league.divisions.map((division) => (
-        <Division key={division.id} division={division} teams={teams} />
-      ))}
+      )}
+      <LeagueGroups league={league} teams={teams} showCounts>
+        {(caption, members) => <TeamTable caption={`${caption} teams`} teams={members} />}
+      </LeagueGroups>
     </>
   );
 }

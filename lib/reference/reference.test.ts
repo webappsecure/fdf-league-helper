@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CITIES } from "@/lib/reference/cities";
 import { COACH_FIRST_NAMES, COACH_LAST_NAMES } from "@/lib/reference/coach-names";
+import { TABLE_A, basePoints, type Grade } from "@/lib/reference/management-tables";
 import { NICKNAME_TABLES } from "@/lib/reference/nicknames";
 import { PALETTE } from "@/lib/reference/palette";
 
@@ -48,5 +49,39 @@ describe("reference data", () => {
     expect(PALETTE).toHaveLength(18);
     expect(new Set(PALETTE.map((color) => color.hex)).size).toBe(18);
     expect(PALETTE.filter((color) => !/^#[0-9a-f]{6}$/.test(color.hex))).toEqual([]);
+  });
+});
+
+describe("management tables", () => {
+  it("has a Table A row for each of the 21 ascending 2d6 rolls", () => {
+    const keys: string[] = [];
+    for (let low = 1; low <= 6; low++) {
+      for (let high = low; high <= 6; high++) keys.push(`${low}-${high}`);
+    }
+
+    expect(Object.keys(TABLE_A).sort()).toEqual(keys);
+  });
+
+  it("never hires an F coach from Table A", () => {
+    const grades = Object.values(TABLE_A).flatMap((row) =>
+      "question" in row ? [row.yes, row.otherwise] : [row.yes],
+    );
+
+    expect(grades).not.toContain("F");
+  });
+
+  it("matches the rulebook's Franchise Points grid", () => {
+    const grades: Grade[] = ["A", "B", "C", "D", "F"];
+    const grid = grades.map((frontOffice) =>
+      grades.map((headCoach) => basePoints(frontOffice, headCoach)),
+    );
+
+    expect(grid).toEqual([
+      [4, 3, 2, 1, 0],
+      [3, 2, 1, 0, 0],
+      [2, 1, 0, 0, 0],
+      [1, 0, 0, 0, 0],
+      [0, 0, 0, 0, 0],
+    ]);
   });
 });
