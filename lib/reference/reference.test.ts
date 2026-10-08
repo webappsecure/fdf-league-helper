@@ -376,6 +376,6 @@ describe("special teams table", () => {
     ["xp2", "11-63", 35],
     ["xp2", "11-66", 0],
   ] as const)("on %s, %s improves on %i of 36 rolls", (column, result, ways) => {
-    expect(waysToImprove(column, result)).toBe(ways);
+    expect(waysToImprove(TABLE_E[column], result)).toBe(ways);
   });
 });

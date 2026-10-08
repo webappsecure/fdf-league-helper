@@ -88,8 +88,10 @@ export function isBetter(candidate: SpecialTeamsResult, current: SpecialTeamsRes
 
 // How many of the 36 ways two dice can fall give a better result than this
 // one on the same column. A double falls one way, any other roll two.
-export function waysToImprove(name: SpecialTeamsColumn, current: SpecialTeamsResult): number {
-  const rows: Record<string, SpecialTeamsResult> = TABLE_E[name];
+export function waysToImprove(
+  rows: Record<string, SpecialTeamsResult>,
+  current: SpecialTeamsResult,
+): number {
   return Object.entries(rows).reduce((ways, [key, result]) => {
     if (!isBetter(result, current)) return ways;
     return ways + (key[0] === key[2] ? 1 : 2);

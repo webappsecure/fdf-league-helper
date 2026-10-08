@@ -5,31 +5,35 @@ import {
   isBetter,
   resultLabel,
   waysToImprove,
-  type SpecialTeamsColumn,
   type SpecialTeamsResult,
 } from "@/lib/reference/special-teams-tables";
 import type { Draft, SpecialTeams } from "@/lib/rules/draft";
 
-// One of a team's four results, as the re-roll loop sees it: which column it
-// came from, what the team holds, and how to look a new roll up and keep it.
+// One of a team's four results, as the re-roll loop sees it: what the team
+// holds, its chance of improving, and how to look a new roll up and keep it.
 type Slot = {
-  name: SpecialTeamsColumn;
   label: string;
   held: () => SpecialTeamsResult;
+  ways: () => number;
   lookUp: (key: string) => SpecialTeamsResult;
   keep: (key: string) => void;
 };
 
-// Ties a slot to one column, so a return quality can only be kept as a return
-// quality and a range as a range.
+// Ties a slot to one column, so it is scored on the rows it re-rolls on, and a
+// return quality can only be kept as a return quality and a range as a range.
 function slot<Result extends SpecialTeamsResult>(
-  name: SpecialTeamsColumn,
   label: string,
   rows: Record<string, Result>,
   held: () => Result,
   set: (result: Result) => void,
 ): Slot {
-  return { name, label, held, lookUp: (key) => rows[key], keep: (key) => set(rows[key]) };
+  return {
+    label,
+    held,
+    ways: () => waysToImprove(rows, held()),
+    lookUp: (key) => rows[key],
+    keep: (key) => set(rows[key]),
+  };
 }
 
 // Step 14. Each team rolls on four Table E columns, then spends leftover
@@ -60,22 +64,22 @@ export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): 
       xpRange: first("XP", TABLE_E[xpColumn]),
     };
     const slots = [
-      slot("kickReturn", "Kickoff return", TABLE_E.kickReturn, () => special.kickReturn, (result) => {
+      slot("Kickoff return", TABLE_E.kickReturn, () => special.kickReturn, (result) => {
         special.kickReturn = result;
       }),
-      slot("puntReturn", "Punt return", TABLE_E.puntReturn, () => special.puntReturn, (result) => {
+      slot("Punt return", TABLE_E.puntReturn, () => special.puntReturn, (result) => {
         special.puntReturn = result;
       }),
-      slot("fg", "FG", TABLE_E.fg, () => special.fgRange, (result) => {
+      slot("FG", TABLE_E.fg, () => special.fgRange, (result) => {
         special.fgRange = result;
       }),
-      slot(xpColumn, "XP", TABLE_E[xpColumn], () => special.xpRange, (result) => {
+      slot("XP", TABLE_E[xpColumn], () => special.xpRange, (result) => {
         special.xpRange = result;
       }),
     ];
 
     while (card.points > 0) {
-      const ways = slots.map(({ name, held }) => waysToImprove(name, held()));
+      const ways = slots.map((each) => each.ways());
       const most = Math.max(...ways);
       if (most === 0) break;
       const weakest = slots[ways.indexOf(most)];
