@@ -57,7 +57,7 @@ export function generateSeason(
   );
   runOffenseDraft(draft);
   runDefenseDraft(draft);
-  rollSpecialTeams(draft, xpKickDistance);
+  const specialTeams = rollSpecialTeams(draft, xpKickDistance);
 
   const offense = draftResults(draft);
   const defense = defenseResults(draft);
@@ -68,7 +68,7 @@ export function generateSeason(
       offenseQualities: offense[index].offenseQualities,
       defenseProfile: defense[index].defenseProfile,
       defenseQualities: defense[index].defenseQualities,
-      ...draft.cards[index].specialTeams!,
+      ...specialTeams[index],
     })),
     log: [...management.log, ...draft.log],
   };

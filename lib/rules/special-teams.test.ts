@@ -29,9 +29,7 @@ describe("special teams (step 14)", () => {
       dice([5, 4], [1, 1], [1, 1], [1, 1], [6, 6], [6, 3], [2, 3], [5, 5]),
     );
 
-    rollSpecialTeams(draft, 2);
-
-    expect(draft.cards.map((card) => card.specialTeams)).toEqual([
+    expect(rollSpecialTeams(draft, 2)).toEqual([
       { kickReturn: "ELECTRIC_SEMI", puntReturn: null, fgRange: "11-45", xpRange: "11-63" },
       { kickReturn: "ELECTRIC", puntReturn: "ELECTRIC_SEMI", fgRange: "11-53", xpRange: "11-66" },
     ]);
@@ -53,11 +51,8 @@ describe("special teams (step 14)", () => {
     const fifteen = openDraft([team(1)], dice([1, 1], [1, 1], [1, 1], [1, 1]));
     const two = openDraft([team(1)], dice([1, 1], [1, 1], [1, 1], [1, 1]));
 
-    rollSpecialTeams(fifteen, 15);
-    rollSpecialTeams(two, 2);
-
-    expect(fifteen.cards[0].specialTeams?.xpRange).toBe("11-56");
-    expect(two.cards[0].specialTeams?.xpRange).toBe("11-63");
+    expect(rollSpecialTeams(fifteen, 15)[0].xpRange).toBe("11-56");
+    expect(rollSpecialTeams(two, 2)[0].xpRange).toBe("11-63");
   });
 
   it("re-rolls the result most likely to improve and keeps a better one", () => {
@@ -65,9 +60,9 @@ describe("special teams (step 14)", () => {
     // quality on 8, and the two kicks are already at their best.
     const draft = openDraft([team(1, 1)], dice([1, 1], [1, 1], [6, 6], [6, 6], [5, 6]));
 
-    rollSpecialTeams(draft, 2);
+    const [special] = rollSpecialTeams(draft, 2);
 
-    expect(draft.cards[0].specialTeams).toEqual({
+    expect(special).toEqual({
       kickReturn: null,
       puntReturn: "ELECTRIC",
       fgRange: "11-65",
@@ -84,9 +79,9 @@ describe("special teams (step 14)", () => {
     // No kickoff return quality and an FG of 11-61 both improve on 8 of 36.
     const draft = openDraft([team(1, 1)], dice([1, 1], [6, 6], [3, 6], [6, 6], [6, 6]));
 
-    rollSpecialTeams(draft, 2);
+    const [special] = rollSpecialTeams(draft, 2);
 
-    expect(draft.cards[0].specialTeams).toMatchObject({ kickReturn: "ELECTRIC", fgRange: "11-61" });
+    expect(special).toMatchObject({ kickReturn: "ELECTRIC", fgRange: "11-61" });
   });
 
   it("keeps the old result when the new roll is no better", () => {
@@ -95,9 +90,9 @@ describe("special teams (step 14)", () => {
       dice([6, 6], [6, 6], [2, 6], [6, 6], [1, 1], [2, 6]),
     );
 
-    rollSpecialTeams(draft, 2);
+    const [special] = rollSpecialTeams(draft, 2);
 
-    expect(draft.cards[0].specialTeams?.fgRange).toBe("11-55");
+    expect(special.fgRange).toBe("11-55");
     expect(messages(draft).slice(4)).toEqual([
       "T1: Spends 1 FP to re-roll FG (11-55). Roll 1-1, 11-45: keeps 11-55. 1 FP left.",
       "T1: Spends 1 FP to re-roll FG (11-55). Roll 2-6, 11-55: keeps 11-55. 0 FP left.",
@@ -112,9 +107,9 @@ describe("special teams (step 14)", () => {
       dice([6, 6], [6, 6], [1, 1], [1, 1], [6, 6], [5, 5]),
     );
 
-    rollSpecialTeams(draft, 15);
+    const [special] = rollSpecialTeams(draft, 15);
 
-    expect(draft.cards[0].specialTeams).toMatchObject({ fgRange: "11-65", xpRange: "11-66" });
+    expect(special).toMatchObject({ fgRange: "11-65", xpRange: "11-66" });
     expect(messages(draft).slice(4)).toEqual([
       "T1: Spends 1 FP to re-roll FG (11-45). Roll 6-6, 11-65: kept. 1 FP left.",
       "T1: Spends 1 FP to re-roll XP (11-56). Roll 5-5, 11-66: kept. 0 FP left.",

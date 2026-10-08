@@ -39,11 +39,12 @@ function slot<Result extends SpecialTeamsResult>(
 // Step 14. Each team rolls on four Table E columns, then spends leftover
 // Franchise Points one at a time on re-rolls, always of the result with the
 // best chance of improving, and keeps the better of the old and new result.
-// Points still unspent when nothing can improve are lost.
-export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): void {
+// Points still unspent when nothing can improve are lost. Returns each team's
+// results in card order.
+export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): SpecialTeams[] {
   const xpColumn = xpKickDistance === 2 ? "xp2" : "xp15";
 
-  for (const card of draft.cards) {
+  return draft.cards.map((card) => {
     const say = (message: string) =>
       draft.log.push({ step: "special-teams", franchiseId: card.franchiseId, message });
     const roll = () => ascendingKey(rollD6(draft.rng), rollD6(draft.rng));
@@ -98,6 +99,6 @@ export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): 
     }
 
     if (card.points > 0) say(`${card.teamName}: ${card.points} FP unused and lost.`);
-    card.specialTeams = special;
-  }
+    return special;
+  });
 }

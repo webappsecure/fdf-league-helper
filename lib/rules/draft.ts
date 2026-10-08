@@ -67,7 +67,6 @@ type SideCard<Profile extends string, Name extends string> = {
 export type Card = DraftTeam & {
   offense: SideCard<Exclude<OffenseProfile, "AVERAGE">, OffenseQuality>;
   defense: SideCard<Exclude<DefenseProfile, "AVERAGE">, DefenseQualityName>;
-  specialTeams: SpecialTeams | null;
 };
 
 export type Draft = {
@@ -84,7 +83,6 @@ export function openDraft(teams: DraftTeam[], rng: Rng): Draft {
       ...team,
       offense: { profile: "AVERAGE", qualities: [] },
       defense: { profile: "AVERAGE", qualities: [] },
-      specialTeams: null,
     })),
     ...qvCdvFor(teams.length),
     rng,
