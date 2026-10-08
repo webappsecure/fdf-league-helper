@@ -13,6 +13,7 @@ import type {
   OwnershipLoyalty,
   OwnershipStyle,
 } from "@/lib/reference/management-tables";
+import type { OffenseProfile, Quality } from "@/lib/reference/offense-tables";
 
 export type Team = Identity & {
   id: number;
@@ -25,7 +26,20 @@ export type Team = Identity & {
   ownershipLoyalty: OwnershipLoyalty | null;
   frontOfficeGrade: Grade | null;
   headCoachGrade: Grade | null;
+  // Null until the league is generated. Qualities are in card order.
+  offenseProfile: OffenseProfile | null;
+  offenseQualities: Quality[] | null;
 };
+
+// A row as SQLite returns it: the qualities are still JSON text.
+type TeamRow = Omit<Team, "offenseQualities"> & { offenseQualities: string | null };
+
+function toTeam(row: TeamRow): Team {
+  return {
+    ...row,
+    offenseQualities: row.offenseQualities === null ? null : JSON.parse(row.offenseQualities),
+  };
+}
 
 const TEAM_SELECT = `
   SELECT team_season.id AS id, team_season.franchise_id AS franchiseId,
@@ -37,7 +51,9 @@ const TEAM_SELECT = `
          team_season.ownership_style AS ownershipStyle,
          team_season.ownership_loyalty AS ownershipLoyalty,
          team_season.front_office_grade AS frontOfficeGrade,
-         team_season.head_coach_grade AS headCoachGrade
+         team_season.head_coach_grade AS headCoachGrade,
+         team_season.offense_profile AS offenseProfile,
+         team_season.offense_qualities AS offenseQualities
   FROM team_season
 `;
 
@@ -120,14 +136,15 @@ export function fillTeams(db: DatabaseSync, leagueId: number, rng: Rng): number 
 }
 
 export function listTeams(db: DatabaseSync, leagueId: number): Team[] {
-  return db
+  const rows = db
     .prepare(
       `${TEAM_SELECT}
        JOIN season ON season.id = team_season.season_id
        WHERE season.league_id = ? AND season.sequence = 1
        ORDER BY team_season.position`,
     )
-    .all(leagueId) as Team[];
+    .all(leagueId) as TeamRow[];
+  return rows.map(toTeam);
 }
 
 // Returns false when the team does not exist.
@@ -157,9 +174,10 @@ export function rerollTeamField(
       .get(teamId) as { seasonId: number } | undefined;
     if (!row) return null;
 
-    const teams = db
+    const rows = db
       .prepare(`${TEAM_SELECT} WHERE team_season.season_id = ?`)
-      .all(row.seasonId) as Team[];
+      .all(row.seasonId) as TeamRow[];
+    const teams = rows.map(toTeam);
     const current = teams.find((team) => team.id === teamId)!;
     const others = teams.filter((team) => team.id !== teamId);
 

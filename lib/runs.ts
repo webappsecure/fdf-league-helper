@@ -1,13 +1,13 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
-import { rollManagement, type Step } from "@/lib/rules/management";
+import { generateSeason, type GenerationLogEntry } from "@/lib/rules/generation";
 
 export type GenerateResult =
   | { ok: true; runId: number }
   | { ok: false; reason: "not-found" | "no-teams" | "already-generated" };
 
-export type RunLogLine = { step: Step; franchiseId: number | null; message: string };
+export type RunLogLine = GenerationLogEntry;
 
 export type GenerationRun = {
   id: number;
@@ -16,8 +16,8 @@ export type GenerationRun = {
   entries: RunLogLine[];
 };
 
-// Rolls the management values for every team of a league that has not been
-// generated yet, and saves them with the run and its log. The status check and
+// Rolls the management values and runs the offense draft for every team of a
+// league that has not been generated yet, and saves them with the run and its log. The status check and
 // the writes share one transaction, so a league cannot be generated twice.
 export function generateLeague(db: DatabaseSync, leagueId: number, seed: number): GenerateResult {
   return transaction(db, (): GenerateResult => {
@@ -36,7 +36,7 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
       .all(season.id) as { franchiseId: number; teamName: string; coachName: string }[];
     if (teams.length === 0) return { ok: false, reason: "no-teams" };
 
-    const result = rollManagement(teams, seededRng(seed));
+    const result = generateSeason(teams, seededRng(seed));
 
     const runId = Number(
       db
@@ -57,7 +57,7 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
     const updateTeam = db.prepare(
       `UPDATE team_season
        SET ownership_style = ?, ownership_loyalty = ?, front_office_grade = ?,
-           head_coach_grade = ?
+           head_coach_grade = ?, offense_profile = ?, offense_qualities = ?
        WHERE season_id = ? AND franchise_id = ?`,
     );
     for (const team of result.teams) {
@@ -66,6 +66,8 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
         team.ownershipLoyalty,
         team.frontOfficeGrade,
         team.headCoachGrade,
+        team.offenseProfile,
+        JSON.stringify(team.offenseQualities),
         season.id,
         team.franchiseId,
       );

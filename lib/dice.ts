@@ -13,6 +13,18 @@ export function rollD6(rng: Rng): Die {
   return (Math.floor(rng() * 6) + 1) as Die;
 }
 
+// Shuffles a stack of cards (Fisher-Yates) into a new array, calling the random
+// source once per swap. A source that always returns just under 1 keeps the
+// order, which lets tests script the draws.
+export function shuffle<T>(items: readonly T[], rng: Rng): T[] {
+  const cards = [...items];
+  for (let last = cards.length - 1; last > 0; last--) {
+    const pick = Math.floor(rng() * (last + 1));
+    [cards[last], cards[pick]] = [cards[pick], cards[last]];
+  }
+  return cards;
+}
+
 // A repeatable random source (mulberry32) over an unsigned 32-bit seed, so a
 // run can be replayed from its stored seed. Not for anything secret.
 export function seededRng(seed: number): Rng {

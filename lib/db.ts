@@ -88,6 +88,12 @@ const MIGRATIONS: string[] = [
     UNIQUE (run_id, position)
   );
   `,
+  `
+  ALTER TABLE team_season ADD COLUMN offense_profile TEXT
+    CHECK (offense_profile IN ('PROLIFIC', 'PROLIFIC_SEMI', 'AVERAGE', 'DULL_SEMI', 'DULL'));
+  -- A JSON array of { quality, strength } in card order.
+  ALTER TABLE team_season ADD COLUMN offense_qualities TEXT;
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

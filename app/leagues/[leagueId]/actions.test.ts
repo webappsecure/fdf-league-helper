@@ -42,6 +42,8 @@ const team: Team = {
   ownershipLoyalty: null,
   frontOfficeGrade: null,
   headCoachGrade: null,
+  offenseProfile: null,
+  offenseQualities: null,
 };
 
 function failing(): never {

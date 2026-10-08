@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ascendingKey, rollD100, rollD6, seededRng, type Rng } from "@/lib/dice";
+import { ascendingKey, rollD100, rollD6, seededRng, shuffle, type Rng } from "@/lib/dice";
 
 // Replays the given values in order, then repeats them.
 function scripted(values: number[]): Rng {
@@ -66,5 +66,44 @@ describe("seededRng", () => {
 
     expect(values.every((value) => value >= 0 && value < 1)).toBe(true);
     expect(new Set(values.map((value) => Math.floor(value * 6) + 1)).size).toBe(6);
+  });
+});
+
+describe("shuffle", () => {
+  const cards = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  it("keeps every card and leaves the input untouched", () => {
+    const input = [...cards];
+
+    const shuffled = shuffle(input, seededRng(7));
+
+    expect([...shuffled].sort((a, b) => a - b)).toEqual(cards);
+    expect(shuffled).not.toEqual(cards);
+    expect(input).toEqual(cards);
+  });
+
+  it("gives the same order for the same seed and another for a different one", () => {
+    expect(shuffle(cards, seededRng(99))).toEqual(shuffle(cards, seededRng(99)));
+    expect(shuffle(cards, seededRng(99))).not.toEqual(shuffle(cards, seededRng(100)));
+  });
+
+  it("calls the random source once per swap", () => {
+    let calls = 0;
+
+    const kept = shuffle(cards, () => {
+      calls++;
+      return 0.9999;
+    });
+
+    expect(calls).toBe(9);
+    expect(kept).toEqual(cards);
+    expect(shuffle([], seededRng(1))).toEqual([]);
+  });
+
+  it("can put any card in any place", () => {
+    const seen = new Set<string>();
+    for (let seed = 0; seed < 200; seed++) seen.add(shuffle([1, 2, 3], seededRng(seed)).join(""));
+
+    expect(seen.size).toBe(6);
   });
 });

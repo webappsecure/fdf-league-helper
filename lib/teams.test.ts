@@ -4,6 +4,7 @@ import { openDatabase } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import type { LeagueSetupInput } from "@/lib/league-setup";
 import { createLeague, deleteLeague, getLeague } from "@/lib/leagues";
+import { generateLeague } from "@/lib/runs";
 import { fillTeams, listTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
 let db: DatabaseSync;
@@ -60,7 +61,9 @@ describe("teams created with a league", () => {
           team.ownershipStyle === null &&
           team.ownershipLoyalty === null &&
           team.frontOfficeGrade === null &&
-          team.headCoachGrade === null,
+          team.headCoachGrade === null &&
+          team.offenseProfile === null &&
+          team.offenseQualities === null,
       ),
     ).toBe(true);
     expect(teams.every((team) => team.city && team.nickname && team.headCoachName)).toBe(true);
@@ -214,5 +217,25 @@ describe("rerollTeamField", () => {
   it("returns null for an unknown team", () => {
     expect(rerollTeamField(db, 999, "city", seeded(1))).toBeNull();
     expect(db.isTransaction).toBe(false);
+  });
+});
+
+describe("teams of a generated league", () => {
+  it("keep their offense when an identity field is edited or re-rolled", () => {
+    const id = createLeague(db, setup(), seeded(1));
+    generateLeague(db, id, 11);
+    const [before] = listTeams(db, id);
+    expect(Array.isArray(before.offenseQualities)).toBe(true);
+
+    updateTeamField(db, before.id, "city", "Renamed Town");
+    const rolled = rerollTeamField(db, before.id, "nickname", seeded(3))!;
+
+    expect(rolled.offenseProfile).toBe(before.offenseProfile);
+    expect(rolled.offenseQualities).toEqual(before.offenseQualities);
+    expect(listTeams(db, id)[0]).toEqual({
+      ...before,
+      city: "Renamed Town",
+      nickname: rolled.nickname,
+    });
   });
 });

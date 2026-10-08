@@ -5,7 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb, openDatabase, transaction } from "@/lib/db";
 import { getLeague } from "@/lib/leagues";
-import { generateLeague } from "@/lib/runs";
+import { generateLeague, getGenerationRun } from "@/lib/runs";
 import { fillTeams, listTeams } from "@/lib/teams";
 
 let dir: string;
@@ -53,7 +53,7 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(3);
+    expect(user_version).toBe(4);
     expect(tableNames(file)).toHaveLength(8);
   });
 
@@ -127,10 +127,118 @@ describe("openDatabase", () => {
         ownershipLoyalty: null,
         frontOfficeGrade: null,
         headCoachGrade: null,
+        offenseProfile: null,
+        offenseQualities: null,
       }),
     ]);
     expect(generateLeague(db, 1, 7).ok).toBe(true);
     expect(listTeams(db, 1)[0].frontOfficeGrade).not.toBeNull();
+    db.close();
+  });
+
+  it("upgrades a generated league from before the offense draft and keeps its values", () => {
+    const file = path.join(dir, "v3.sqlite");
+    // Only what migration 4 touches needs its exact earlier shape: the team
+    // table as migration 3 left it, holding one generated team.
+    const old = new DatabaseSync(file);
+    old.exec(`
+      CREATE TABLE league (id INTEGER PRIMARY KEY, name TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE season (
+        id INTEGER PRIMARY KEY,
+        league_id INTEGER NOT NULL REFERENCES league (id) ON DELETE CASCADE,
+        sequence INTEGER NOT NULL,
+        label TEXT NOT NULL,
+        xp_kick_distance INTEGER NOT NULL CHECK (xp_kick_distance IN (2, 15)),
+        status TEXT NOT NULL CHECK (status IN ('setup', 'draft', 'accepted')),
+        team_count INTEGER NOT NULL CHECK (team_count BETWEEN 8 AND 56),
+        UNIQUE (league_id, sequence)
+      );
+      CREATE TABLE conference (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL
+      );
+      CREATE TABLE division (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        conference_id INTEGER REFERENCES conference (id) ON DELETE CASCADE,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        team_count INTEGER NOT NULL CHECK (team_count >= 1)
+      );
+      CREATE TABLE franchise (
+        id INTEGER PRIMARY KEY,
+        league_id INTEGER NOT NULL REFERENCES league (id) ON DELETE CASCADE,
+        active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+      );
+      CREATE TABLE team_season (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        franchise_id INTEGER NOT NULL REFERENCES franchise (id) ON DELETE CASCADE,
+        division_id INTEGER REFERENCES division (id) ON DELETE SET NULL,
+        position INTEGER NOT NULL,
+        city TEXT NOT NULL,
+        nickname TEXT NOT NULL,
+        head_coach_name TEXT NOT NULL,
+        primary_color TEXT NOT NULL,
+        secondary_color TEXT NOT NULL,
+        ownership_style TEXT CHECK (ownership_style IN ('MEDDLING', 'SAVVY')),
+        ownership_loyalty TEXT CHECK (ownership_loyalty IN ('SELFISH', 'LOYAL')),
+        front_office_grade TEXT CHECK (front_office_grade IN ('A', 'B', 'C', 'D', 'F')),
+        head_coach_grade TEXT CHECK (head_coach_grade IN ('A', 'B', 'C', 'D', 'F')),
+        UNIQUE (season_id, franchise_id),
+        UNIQUE (season_id, position)
+      );
+      CREATE TABLE run (
+        id INTEGER PRIMARY KEY,
+        season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+        kind TEXT NOT NULL CHECK (kind IN ('generation', 'offseason')),
+        seed INTEGER NOT NULL,
+        created_at TEXT NOT NULL
+      );
+      CREATE TABLE run_log_entry (
+        id INTEGER PRIMARY KEY,
+        run_id INTEGER NOT NULL REFERENCES run (id) ON DELETE CASCADE,
+        position INTEGER NOT NULL,
+        step TEXT NOT NULL,
+        franchise_id INTEGER REFERENCES franchise (id) ON DELETE CASCADE,
+        message TEXT NOT NULL,
+        UNIQUE (run_id, position)
+      );
+      INSERT INTO league (id, name, created_at) VALUES (1, 'Old League', '2026-01-01T00:00:00.000Z');
+      INSERT INTO season (id, league_id, sequence, label, xp_kick_distance, status, team_count)
+        VALUES (1, 1, 1, 'Season 1', 2, 'draft', 8);
+      INSERT INTO franchise (id, league_id) VALUES (1, 1);
+      INSERT INTO team_season (season_id, franchise_id, position, city, nickname,
+                               head_coach_name, primary_color, secondary_color,
+                               ownership_style, front_office_grade, head_coach_grade)
+        VALUES (1, 1, 0, 'Chicago', 'Aces', 'Adam Adams', '#000000', '#ffffff', 'SAVVY', 'A', 'B');
+      INSERT INTO run (id, season_id, kind, seed, created_at)
+        VALUES (1, 1, 'generation', 5, '2026-01-01T00:00:00.000Z');
+      INSERT INTO run_log_entry (run_id, position, step, franchise_id, message)
+        VALUES (1, 0, 'ownership', 1, 'Chicago Aces: style roll 6, SAVVY.');
+      PRAGMA user_version = 3;
+    `);
+    old.close();
+
+    const db = openDatabase(file);
+
+    expect(listTeams(db, 1)).toEqual([
+      expect.objectContaining({
+        city: "Chicago",
+        ownershipStyle: "SAVVY",
+        frontOfficeGrade: "A",
+        headCoachGrade: "B",
+        offenseProfile: null,
+        offenseQualities: null,
+      }),
+    ]);
+    expect(getGenerationRun(db, 1)?.entries).toHaveLength(1);
+    expect(generateLeague(db, 1, 7)).toEqual({ ok: false, reason: "already-generated" });
+    expect(() =>
+      db.exec("UPDATE team_season SET offense_profile = 'SPLENDID' WHERE id = 1"),
+    ).toThrow();
     db.close();
   });
 

@@ -5,6 +5,8 @@ import { seededRng } from "@/lib/dice";
 import type { LeagueSetupInput } from "@/lib/league-setup";
 import { createLeague, deleteLeague } from "@/lib/leagues";
 import { basePoints } from "@/lib/reference/management-tables";
+import { pairIndex } from "@/lib/reference/offense-tables";
+import { GENERATION_STEPS } from "@/lib/rules/generation";
 import { generateLeague, getGenerationRun } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
 
@@ -50,6 +52,10 @@ function management(leagueId: number) {
   ]);
 }
 
+function offense(leagueId: number) {
+  return listTeams(db, leagueId).map((team) => [team.offenseProfile, team.offenseQualities]);
+}
+
 describe("generateLeague", () => {
   it("saves the run, its log, every team's values and the draft status", () => {
     const id = league(10);
@@ -71,20 +77,89 @@ describe("generateLeague", () => {
       expect(["SELFISH", "LOYAL", null]).toContain(team.ownershipLoyalty);
     }
 
-    // Four entries per team: each step in turn, teams in position order.
+    // Four management entries per team: each step in turn, teams in position
+    // order. The offense draft follows.
     const order = teams.map((team) => team.franchiseId);
-    expect(run.entries.map((entry) => entry.step)).toEqual([
+    const managed = run.entries.slice(0, 40);
+    expect(managed.map((entry) => entry.step)).toEqual([
       ...Array(10).fill("ownership"),
       ...Array(10).fill("front-office"),
       ...Array(10).fill("head-coach"),
       ...Array(10).fill("franchise-points"),
     ]);
-    expect(run.entries.map((entry) => entry.franchiseId)).toEqual([
+    expect(managed.map((entry) => entry.franchiseId)).toEqual([
       ...order,
       ...order,
       ...order,
       ...order,
     ]);
+  });
+
+  it("saves every team's offense and the draft's log after the management steps", () => {
+    const id = league(10);
+
+    generateLeague(db, id, 4242);
+
+    const teams = listTeams(db, id);
+    for (const team of teams) {
+      expect(["PROLIFIC", "PROLIFIC_SEMI", "AVERAGE", "DULL_SEMI", "DULL"]).toContain(
+        team.offenseProfile,
+      );
+      const pairs = team.offenseQualities!.map((entry) => pairIndex(entry.quality));
+      expect(pairs).toEqual([...new Set(pairs)].sort((a, b) => a - b));
+      expect(team.offenseQualities!.every((entry) => /^(FULL|SEMI)$/.test(entry.strength))).toBe(
+        true,
+      );
+    }
+    expect(teams.filter((team) => team.offenseProfile === "PROLIFIC")).toHaveLength(1);
+    expect(teams.filter((team) => team.offenseProfile === "PROLIFIC_SEMI")).toHaveLength(1);
+    // QV is 2: four teams are efficient and four inefficient.
+    const efficiency = teams.flatMap((team) =>
+      team.offenseQualities!.filter((entry) => pairIndex(entry.quality) === 5),
+    );
+    expect(efficiency).toHaveLength(8);
+
+    const entries = getGenerationRun(db, id)!.entries;
+    expect([...new Set(entries.map((entry) => entry.step))]).toEqual([...GENERATION_STEPS]);
+    expect(entries[40]).toEqual({
+      step: "qv-cdv",
+      franchiseId: null,
+      message: "10 teams: QV 2, CDV 1.",
+    });
+    const known = new Set(teams.map((team) => team.franchiseId));
+    expect(entries.slice(41).every((entry) => entry.franchiseId === null || known.has(entry.franchiseId))).toBe(true);
+  });
+
+  it("stores qualities as JSON text in card order", () => {
+    const id = league();
+    generateLeague(db, id, 9);
+
+    const stored = db
+      .prepare("SELECT offense_qualities AS json FROM team_season ORDER BY position")
+      .all() as { json: string }[];
+
+    expect(stored.map((row) => JSON.parse(row.json))).toEqual(
+      listTeams(db, id).map((team) => team.offenseQualities),
+    );
+    expect(stored.every((row) => row.json.startsWith("["))).toBe(true);
+  });
+
+  it("saves nothing when a team's values cannot be stored", () => {
+    const id = league();
+    // Makes the last team's update fail after the run, its log and the other
+    // teams have been written.
+    db.exec(`
+      CREATE TRIGGER reject_last BEFORE UPDATE ON team_season WHEN NEW.position = 7
+      BEGIN SELECT RAISE(ABORT, 'rejected'); END;
+    `);
+
+    expect(() => generateLeague(db, id, 1)).toThrow("rejected");
+
+    expect(status(id)).toBe("setup");
+    expect([count("run"), count("run_log_entry")]).toEqual([0, 0]);
+    expect(listTeams(db, id).every((team) => team.offenseProfile === null)).toBe(true);
+    expect(management(id).flat().every((value) => value === null)).toBe(true);
+    expect(db.isTransaction).toBe(false);
   });
 
   it("logs each team under the name and grades it was given", () => {
@@ -93,7 +168,8 @@ describe("generateLeague", () => {
 
     const [team] = listTeams(db, id);
     const lines = getGenerationRun(db, id)!
-      .entries.filter((entry) => entry.franchiseId === team.franchiseId)
+      .entries.slice(0, 32)
+      .filter((entry) => entry.franchiseId === team.franchiseId)
       .map((entry) => entry.message);
 
     expect(lines).toHaveLength(4);
@@ -117,6 +193,7 @@ describe("generateLeague", () => {
     generateLeague(db, third, 31338);
 
     expect(management(second)).toEqual(management(first));
+    expect(offense(second)).toEqual(offense(first));
     expect(getGenerationRun(db, second)!.entries.map((entry) => entry.message)).toEqual(
       getGenerationRun(db, first)!.entries.map((entry) => entry.message),
     );
@@ -158,6 +235,7 @@ describe("generateLeague", () => {
     expect(status(untouched)).toBe("setup");
     expect(getGenerationRun(db, untouched)).toBeNull();
     expect(management(untouched).flat().every((value) => value === null)).toBe(true);
+    expect(offense(untouched).flat().every((value) => value === null)).toBe(true);
   });
 });
 
@@ -178,7 +256,8 @@ describe("deleting a generated league", () => {
     deleteLeague(db, doomed);
 
     expect(getGenerationRun(db, doomed)).toBeNull();
-    expect(getGenerationRun(db, kept)!.entries).toHaveLength(32);
-    expect([count("run"), count("run_log_entry")]).toEqual([1, 32]);
+    const keptEntries = getGenerationRun(db, kept)!.entries.length;
+    expect(keptEntries).toBeGreaterThan(32);
+    expect([count("run"), count("run_log_entry")]).toEqual([1, keptEntries]);
   });
 });
