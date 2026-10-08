@@ -74,9 +74,7 @@ export async function fillTeamsAction(leagueId: number): Promise<CellResult> {
 }
 
 export async function deleteLeagueAction(leagueId: number): Promise<ActionFailure | null> {
-  if (!Number.isInteger(leagueId) || leagueId < 1) {
-    return LEAGUE_NOT_FOUND;
-  }
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
 
   try {
     deleteLeague(getDb(), leagueId);

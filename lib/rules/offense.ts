@@ -1,4 +1,4 @@
-import { shuffle, type Rng } from "@/lib/dice";
+import { shuffle } from "@/lib/dice";
 import type { Grade } from "@/lib/reference/management-tables";
 import {
   DRAFT_PROFILES,
@@ -17,15 +17,10 @@ import {
 import {
   draftProfiles as draftSideProfiles,
   draftRemainingQualities as draftSideQualities,
-  openDraft,
   type Card,
   type Draft,
-  type DraftLogEntry,
-  type DraftTeam,
   type Side,
 } from "@/lib/rules/draft";
-
-export { openDraft, type Draft, type DraftTeam };
 
 export type OffenseResult = {
   franchiseId: number;
@@ -116,15 +111,4 @@ export function runOffenseDraft(draft: Draft): void {
   draftProfiles(draft);
   draftRemainingQualities(draft);
   draftEfficiency(draft);
-}
-
-// CE "Create A New League" steps 8 to 11, with Franchise Points spent
-// automatically to avoid bad results whenever a team can afford to.
-export function draftOffense(
-  teams: DraftTeam[],
-  rng: Rng,
-): { teams: OffenseResult[]; log: DraftLogEntry[] } {
-  const draft = openDraft(teams, rng);
-  runOffenseDraft(draft);
-  return { teams: draftResults(draft), log: draft.log };
 }

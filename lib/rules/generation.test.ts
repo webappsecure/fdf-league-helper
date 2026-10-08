@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { seededRng } from "@/lib/dice";
 import { DEFENSE_PAIRS } from "@/lib/reference/defense-tables";
-import { pairIndex } from "@/lib/reference/offense-tables";
+import { OFFENSE_PAIRS } from "@/lib/reference/offense-tables";
 import { pairIndexIn } from "@/lib/reference/profile-tables";
+import { openDraft } from "@/lib/rules/draft";
 import { GENERATION_STEPS, GENERATION_STEP_HEADINGS, generateSeason } from "@/lib/rules/generation";
 import { rollManagement, type ManagementInput } from "@/lib/rules/management";
-import { draftOffense } from "@/lib/rules/offense";
+import { draftResults, runOffenseDraft } from "@/lib/rules/offense";
 
 function teams(count: number): ManagementInput[] {
   return Array.from({ length: count }, (_, index) => ({
@@ -64,7 +65,7 @@ describe("generateSeason", () => {
     // Management, then the offense draft on its own, from one random source.
     const rng = seededRng(909);
     const management = rollManagement(teams(20), rng);
-    const offense = draftOffense(
+    const draft = openDraft(
       management.teams.map((team, index) => ({
         franchiseId: team.franchiseId,
         teamName: teams(20)[index].teamName,
@@ -73,7 +74,9 @@ describe("generateSeason", () => {
       })),
       rng,
     );
-    const before = [...management.log, ...offense.log];
+    runOffenseDraft(draft);
+    const offense = draftResults(draft);
+    const before = [...management.log, ...draft.log];
 
     const generated = generateSeason(teams(20), seededRng(909), 2);
 
@@ -81,7 +84,7 @@ describe("generateSeason", () => {
     expect(generated.log[before.length].step).toBe("defense-profile");
     expect(
       generated.teams.map((team) => [team.offenseProfile, team.offenseQualities]),
-    ).toEqual(offense.teams.map((team) => [team.offenseProfile, team.offenseQualities]));
+    ).toEqual(offense.map((team) => [team.offenseProfile, team.offenseQualities]));
   });
 
   it("reads XP from the column for the league's kick distance", () => {
@@ -106,7 +109,7 @@ describe("generateSeason", () => {
         expect(order).toEqual([...order].sort((a, b) => a - b));
 
         for (const team of generated) {
-          const pairs = team.offenseQualities.map((entry) => pairIndex(entry.quality));
+          const pairs = team.offenseQualities.map((entry) => pairIndexIn(OFFENSE_PAIRS, entry.quality));
           expect(pairs, "one quality per pair, in card order").toEqual(
             [...new Set(pairs)].sort((a, b) => a - b),
           );

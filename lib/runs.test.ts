@@ -6,7 +6,7 @@ import type { LeagueSetupInput } from "@/lib/league-setup";
 import { createLeague, deleteLeague } from "@/lib/leagues";
 import { basePoints } from "@/lib/reference/management-tables";
 import { DEFENSE_PAIRS } from "@/lib/reference/defense-tables";
-import { pairIndex } from "@/lib/reference/offense-tables";
+import { OFFENSE_PAIRS } from "@/lib/reference/offense-tables";
 import { pairIndexIn } from "@/lib/reference/profile-tables";
 import { GENERATION_STEPS } from "@/lib/rules/generation";
 import { generateLeague, getGenerationRun } from "@/lib/runs";
@@ -123,7 +123,7 @@ describe("generateLeague", () => {
       expect(["PROLIFIC", "PROLIFIC_SEMI", "AVERAGE", "DULL_SEMI", "DULL"]).toContain(
         team.offenseProfile,
       );
-      const pairs = team.offenseQualities!.map((entry) => pairIndex(entry.quality));
+      const pairs = team.offenseQualities!.map((entry) => pairIndexIn(OFFENSE_PAIRS, entry.quality));
       expect(pairs).toEqual([...new Set(pairs)].sort((a, b) => a - b));
       expect(team.offenseQualities!.every((entry) => /^(FULL|SEMI)$/.test(entry.strength))).toBe(
         true,
@@ -133,7 +133,7 @@ describe("generateLeague", () => {
     expect(teams.filter((team) => team.offenseProfile === "PROLIFIC_SEMI")).toHaveLength(1);
     // QV is 2: four teams are efficient and four inefficient.
     const efficiency = teams.flatMap((team) =>
-      team.offenseQualities!.filter((entry) => pairIndex(entry.quality) === 5),
+      team.offenseQualities!.filter((entry) => pairIndexIn(OFFENSE_PAIRS, entry.quality) === 5),
     );
     expect(efficiency).toHaveLength(8);
 

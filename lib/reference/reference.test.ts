@@ -15,9 +15,9 @@ import { NICKNAME_TABLES } from "@/lib/reference/nicknames";
 import {
   DRAFT_PROFILES,
   FOOTNOTE_AWARDS,
+  OFFENSE_PAIRS,
   TABLE_C,
   inPairOrder,
-  pairIndex,
   qualityLabel,
   qvCdvFor,
   type Quality,
@@ -194,7 +194,7 @@ describe("offense tables", () => {
     ];
 
     for (const qualities of sets) {
-      const pairs = qualities.map((entry) => pairIndex(entry.quality));
+      const pairs = qualities.map((entry) => pairIndexIn(OFFENSE_PAIRS, entry.quality));
       expect(pairs.every((pair) => pair === 0 || pair === 1), labels(qualities)).toBe(true);
       expect(new Set(pairs).size, labels(qualities)).toBe(pairs.length);
     }

@@ -3,7 +3,6 @@
 
 import {
   inPairOrderOf,
-  pairIndexIn,
   row as sharedRow,
   type Footnote,
   type ProfileRow,
@@ -34,10 +33,6 @@ export const OFFENSE_PAIRS = [
 
 export type OffenseQuality = (typeof OFFENSE_PAIRS)[number][number];
 export type Quality = SharedQuality<OffenseQuality>;
-
-export function pairIndex(quality: OffenseQuality): number {
-  return pairIndexIn(OFFENSE_PAIRS, quality);
-}
 
 export function inPairOrder(qualities: Quality[]): Quality[] {
   return inPairOrderOf(OFFENSE_PAIRS, qualities);

@@ -1,16 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { seededRng, type Rng } from "@/lib/dice";
 import type { Grade } from "@/lib/reference/management-tables";
-import { pairIndex, qualityLabel } from "@/lib/reference/offense-tables";
+import { OFFENSE_PAIRS, qualityLabel } from "@/lib/reference/offense-tables";
+import { pairIndexIn } from "@/lib/reference/profile-tables";
+import { openDraft, type Draft, type DraftTeam } from "@/lib/rules/draft";
 import {
   draftEfficiency,
-  draftOffense,
   draftProfiles,
   draftRemainingQualities,
   draftResults,
-  openDraft,
-  type Draft,
-  type DraftTeam,
+  runOffenseDraft,
 } from "@/lib/rules/offense";
 
 // Just under 1: a shuffle keeps its order and a die shows 6.
@@ -293,7 +292,7 @@ describe("remaining offense qualities (step 10)", () => {
       expect(held.filter((label) => label === name), name).toHaveLength(2);
     }
     for (const team of draftResults(draft)) {
-      const pairs = team.offenseQualities.map((entry) => pairIndex(entry.quality));
+      const pairs = team.offenseQualities.map((entry) => pairIndexIn(OFFENSE_PAIRS, entry.quality));
       expect(new Set(pairs).size).toBe(pairs.length);
     }
   });
@@ -442,9 +441,13 @@ describe("EFFICIENT and INEFFICIENT (step 11)", () => {
   );
 });
 
-describe("draftOffense", () => {
+describe("runOffenseDraft", () => {
   it("logs QV and CDV first, with no team", () => {
-    const { log } = draftOffense(teams(19), seededRng(1));
+    const draft = openDraft(teams(19), seededRng(1));
+
+    runOffenseDraft(draft);
+
+    const { log } = draft;
 
     expect(log[0]).toEqual({
       step: "qv-cdv",
