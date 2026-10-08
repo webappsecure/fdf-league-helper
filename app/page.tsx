@@ -1,69 +1,76 @@
-import Image from "next/image";
+import Link from "next/link";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { getDb } from "@/lib/db";
+import { listLeagues } from "@/lib/leagues";
+
+async function LeagueList() {
+  // The SQLite driver is synchronous, so opt out of prerendering explicitly.
+  await connection();
+  const leagues = listLeagues(getDb());
+
+  if (leagues.length === 0) {
+    return (
+      <p className="rounded border border-dashed border-zinc-300 p-6 text-zinc-600">
+        No leagues yet.{" "}
+        <Link href="/leagues/new" className="font-medium text-blue-700 underline">
+          Create your first league
+        </Link>
+        .
+      </p>
+    );
+  }
+
+  return (
+    <table className="w-full border-collapse text-left">
+      <thead>
+        <tr className="border-b border-zinc-300 text-sm text-zinc-600">
+          <th scope="col" className="py-2 pr-4 font-medium">
+            League
+          </th>
+          <th scope="col" className="py-2 pr-4 font-medium">
+            Season
+          </th>
+          <th scope="col" className="py-2 font-medium">
+            Teams
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {leagues.map((league) => (
+          <tr key={league.id} className="border-b border-zinc-200">
+            <td className="py-2 pr-4">
+              <Link
+                href={`/leagues/${league.id}`}
+                className="font-medium text-blue-700 underline"
+              >
+                {league.name}
+              </Link>
+            </td>
+            <td className="py-2 pr-4">{league.seasonLabel}</td>
+            <td className="py-2">{league.teamCount}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
 
 export default function Home() {
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+    <>
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h1 className="text-2xl font-semibold">Leagues</h1>
+        <Link
+          href="/leagues/new"
+          className="rounded bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800"
+        >
+          New league
+        </Link>
+      </div>
+      <Suspense fallback={<p className="text-zinc-600">Loading leagues...</p>}>
+        <LeagueList />
+      </Suspense>
+    </>
   );
 }

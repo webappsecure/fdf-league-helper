@@ -39,7 +39,9 @@ and installed dependencies before adding machinery.
 - No `src/` directory; routes live in `app/` and the `@/*` alias maps to the
   project root
 - Server components by default; add `'use client'` only when needed
-- No database, auth provider, or component library is installed yet
+- Leagues are stored in a local SQLite file at `data/fdf.sqlite` (git-ignored) through Node's built-in `node:sqlite`; set `FDF_DB_PATH` to use another file
+- Requires Node 24 or later
+- No auth provider or component library is installed
 
 ## Commands
 
@@ -51,7 +53,7 @@ Package manager: npm (`package-lock.json`).
 - Lint: `npm run lint`
 - Test: `npm test` (Vitest, runs once)
 - Test watch: `npm run test:watch`
-- Browser tests: `npm run test:browser` (Playwright, Chromium; starts or reuses the dev server on port 3000)
+- Browser tests: `npm run test:browser` (Playwright, Chromium; builds the app and starts its own server on port 3100 with a throwaway database)
 
 Unit tests live next to the code they cover as `*.test.ts`. Browser tests live in
 `e2e/` as `*.spec.ts`. No typecheck, format, or `Verify` command is configured,
