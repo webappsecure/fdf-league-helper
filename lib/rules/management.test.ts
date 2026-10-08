@@ -54,49 +54,52 @@ describe("front office grade (step 4)", () => {
   });
 });
 
+// One case per outcome of every Table A row: the roll, a style roll, a front
+// office roll and the grade hired. Front office rolls: 6 is A, 4 is B, 2 is C,
+// 1 is D. Style rolls: 1 MEDDLING, 6 SAVVY, 3 no quality.
+const TABLE_A_CASES = [
+  ["1-1", 6, 2, "B"],
+  ["1-1", 3, 2, "D"],
+  ["1-2", 3, 6, "C"],
+  ["1-2", 3, 4, "D"],
+  ["1-3", 3, 4, "C"],
+  ["1-3", 3, 2, "D"],
+  ["1-4", 6, 1, "A"],
+  ["1-4", 1, 6, "C"],
+  ["1-5", 3, 1, "C"],
+  ["1-6", 3, 2, "D"],
+  ["1-6", 3, 1, "D"],
+  ["1-6", 3, 4, "C"],
+  ["2-2", 3, 6, "C"],
+  ["2-3", 3, 6, "B"],
+  ["2-3", 3, 4, "C"],
+  ["2-4", 3, 1, "D"],
+  ["2-4", 3, 2, "C"],
+  ["2-5", 3, 6, "B"],
+  ["2-5", 3, 4, "B"],
+  ["2-5", 3, 2, "C"],
+  ["2-6", 1, 6, "D"],
+  ["2-6", 6, 1, "B"],
+  ["3-3", 1, 1, "B"],
+  ["3-4", 3, 6, "A"],
+  ["3-4", 3, 4, "B"],
+  ["3-5", 3, 1, "C"],
+  ["3-5", 3, 2, "B"],
+  ["3-6", 1, 1, "B"],
+  ["4-4", 1, 6, "C"],
+  ["4-4", 3, 1, "A"],
+  ["4-5", 1, 1, "B"],
+  ["4-6", 3, 2, "C"],
+  ["4-6", 3, 1, "C"],
+  ["4-6", 3, 4, "B"],
+  ["5-5", 1, 1, "A"],
+  ["5-6", 3, 1, "B"],
+  ["5-6", 3, 2, "A"],
+  ["6-6", 1, 1, "A"],
+] as const;
+
 describe("head coach grade (step 6, Table A)", () => {
-  // Front office rolls: 6 is A, 4 is B, 2 is C, 1 is D. Style rolls: 1 MEDDLING, 6 SAVVY.
-  it.each([
-    // roll, style, front office, expected
-    ["1-1", 6, 2, "B"],
-    ["1-1", 3, 2, "D"],
-    ["1-2", 3, 6, "C"],
-    ["1-2", 3, 4, "D"],
-    ["1-3", 3, 4, "C"],
-    ["1-3", 3, 2, "D"],
-    ["1-4", 6, 1, "A"],
-    ["1-4", 1, 6, "C"],
-    ["1-5", 3, 1, "C"],
-    ["1-6", 3, 2, "D"],
-    ["1-6", 3, 1, "D"],
-    ["1-6", 3, 4, "C"],
-    ["2-2", 3, 6, "C"],
-    ["2-3", 3, 6, "B"],
-    ["2-3", 3, 4, "C"],
-    ["2-4", 3, 1, "D"],
-    ["2-4", 3, 2, "C"],
-    ["2-5", 3, 6, "B"],
-    ["2-5", 3, 4, "B"],
-    ["2-5", 3, 2, "C"],
-    ["2-6", 1, 6, "D"],
-    ["2-6", 6, 1, "B"],
-    ["3-3", 1, 1, "B"],
-    ["3-4", 3, 6, "A"],
-    ["3-4", 3, 4, "B"],
-    ["3-5", 3, 1, "C"],
-    ["3-5", 3, 2, "B"],
-    ["3-6", 1, 1, "B"],
-    ["4-4", 1, 6, "C"],
-    ["4-4", 3, 1, "A"],
-    ["4-5", 1, 1, "B"],
-    ["4-6", 3, 2, "C"],
-    ["4-6", 3, 1, "C"],
-    ["4-6", 3, 4, "B"],
-    ["5-5", 1, 1, "A"],
-    ["5-6", 3, 1, "B"],
-    ["5-6", 3, 2, "A"],
-    ["6-6", 1, 1, "A"],
-  ] as const)("roll %s with style %i and front office roll %i hires %s", (key, style, fo, grade) => {
+  it.each(TABLE_A_CASES)("roll %s with style %i and front office roll %i hires %s", (key, style, fo, grade) => {
     const [low, high] = key.split("-").map(Number);
 
     expect(one(style, 3, fo, low, high).headCoachGrade).toBe(grade);
@@ -104,8 +107,17 @@ describe("head coach grade (step 6, Table A)", () => {
     expect(one(style, 3, fo, high, low).headCoachGrade).toBe(grade);
   });
 
-  it("covers every row of Table A above", () => {
-    expect(Object.keys(TABLE_A)).toHaveLength(21);
+  it("has a case for every outcome of every Table A row", () => {
+    const hired = (key: string) => {
+      const cases = TABLE_A_CASES.filter(([roll]) => roll === key);
+      return [...new Set(cases.map(([, , , grade]) => grade))].sort();
+    };
+
+    for (const [key, row] of Object.entries(TABLE_A)) {
+      const outcomes = "question" in row ? [row.yes, row.otherwise] : [row.yes];
+      expect(hired(key), `row ${key}`).toEqual([...new Set(outcomes)].sort());
+    }
+    expect(TABLE_A_CASES.filter(([roll]) => !(roll in TABLE_A))).toEqual([]);
   });
 });
 

@@ -11,7 +11,11 @@ import { generateLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
 const TEAM_NOT_FOUND: CellResult = { success: false, error: "That team could not be found." };
+// Not typed as CellResult: deleteLeagueAction returns the same failure in its own shape.
+const LEAGUE_NOT_FOUND = { success: false, error: "That league could not be found." } as const;
 const SAVE_FAILED: CellResult = { success: false, error: "Something went wrong. Try again." };
+// One past the largest seed the seeded random source accepts.
+const SEED_LIMIT = 2 ** 32;
 
 function isId(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 1;
@@ -56,7 +60,7 @@ export async function rerollTeamFieldAction(teamId: number, field: string): Prom
 }
 
 export async function fillTeamsAction(leagueId: number): Promise<CellResult> {
-  if (!isId(leagueId)) return { success: false, error: "That league could not be found." };
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
 
   try {
     fillTeams(getDb(), leagueId, Math.random);
@@ -71,7 +75,7 @@ export async function fillTeamsAction(leagueId: number): Promise<CellResult> {
 
 export async function deleteLeagueAction(leagueId: number): Promise<ActionFailure | null> {
   if (!Number.isInteger(leagueId) || leagueId < 1) {
-    return { success: false, error: "That league could not be found." };
+    return LEAGUE_NOT_FOUND;
   }
 
   try {
@@ -87,10 +91,6 @@ export async function deleteLeagueAction(leagueId: number): Promise<ActionFailur
   revalidatePath("/");
   redirect("/");
 }
-
-const LEAGUE_NOT_FOUND: CellResult = { success: false, error: "That league could not be found." };
-// One past the largest seed the seeded random source accepts.
-const SEED_LIMIT = 2 ** 32;
 
 export async function generateLeagueAction(leagueId: number): Promise<CellResult> {
   if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
