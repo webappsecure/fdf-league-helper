@@ -125,7 +125,7 @@ describe("createLeague and getLeague", () => {
 
     expect(() => createLeague(db, invalid)).toThrow();
 
-    for (const table of ["league", "season", "conference", "division"]) {
+    for (const table of ["league", "season", "conference", "division", "team_season"]) {
       expect(count(table), table).toBe(0);
     }
     expect(db.isTransaction).toBe(false);

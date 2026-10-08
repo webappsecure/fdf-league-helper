@@ -1,6 +1,8 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "@/lib/db";
+import type { Rng } from "@/lib/dice";
 import type { DivisionInput, LeagueSetupInput, XpKickDistance } from "@/lib/league-setup";
+import { insertTeams } from "@/lib/teams";
 
 export type LeagueSummary = {
   id: number;
@@ -19,7 +21,11 @@ export type LeagueDetail = LeagueSummary & {
   divisions: DivisionDetail[];
 };
 
-export function createLeague(db: DatabaseSync, input: LeagueSetupInput): number {
+export function createLeague(
+  db: DatabaseSync,
+  input: LeagueSetupInput,
+  rng: Rng = Math.random,
+): number {
   return transaction(db, () => {
     const leagueId = Number(
       db
@@ -59,6 +65,8 @@ export function createLeague(db: DatabaseSync, input: LeagueSetupInput): number 
         addDivisions(conference.divisions, conferenceId);
       });
     }
+
+    insertTeams(db, leagueId, seasonId, rng);
 
     return leagueId;
   });

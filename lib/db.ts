@@ -38,6 +38,28 @@ const MIGRATIONS: string[] = [
     team_count INTEGER NOT NULL CHECK (team_count >= 1)
   );
   `,
+  `
+  CREATE TABLE franchise (
+    id INTEGER PRIMARY KEY,
+    league_id INTEGER NOT NULL REFERENCES league (id) ON DELETE CASCADE,
+    active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1))
+  );
+
+  CREATE TABLE team_season (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+    franchise_id INTEGER NOT NULL REFERENCES franchise (id) ON DELETE CASCADE,
+    division_id INTEGER REFERENCES division (id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    city TEXT NOT NULL,
+    nickname TEXT NOT NULL,
+    head_coach_name TEXT NOT NULL,
+    primary_color TEXT NOT NULL,
+    secondary_color TEXT NOT NULL,
+    UNIQUE (season_id, franchise_id),
+    UNIQUE (season_id, position)
+  );
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {
@@ -78,8 +100,15 @@ export function openDatabase(file: string): DatabaseSync {
 const globalForDb = globalThis as { fdfDatabase?: DatabaseSync };
 
 export function getDb(): DatabaseSync {
-  globalForDb.fdfDatabase ??= openDatabase(
-    process.env.FDF_DB_PATH ?? path.join(process.cwd(), "data", "fdf.sqlite"),
-  );
+  if (globalForDb.fdfDatabase) {
+    // A connection kept across a dev-server reload was opened by older code and
+    // may be missing migrations added since. This is one PRAGMA read when it
+    // is up to date.
+    migrate(globalForDb.fdfDatabase);
+  } else {
+    globalForDb.fdfDatabase = openDatabase(
+      process.env.FDF_DB_PATH ?? path.join(process.cwd(), "data", "fdf.sqlite"),
+    );
+  }
   return globalForDb.fdfDatabase;
 }

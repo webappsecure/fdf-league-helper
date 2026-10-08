@@ -44,8 +44,8 @@ test("creates a league with conferences and divisions", async ({ page }) => {
   for (const conferenceName of ["American", "National"]) {
     await expect(page.getByRole("heading", { level: 3, name: conferenceName })).toBeVisible();
   }
-  await expect(page.getByRole("listitem").filter({ hasText: "East" })).toHaveCount(2);
-  await expect(page.getByRole("listitem").filter({ hasText: "West" })).toHaveCount(2);
+  await expect(page.getByRole("table", { name: "East teams" })).toHaveCount(2);
+  await expect(page.getByRole("table", { name: "West teams" })).toHaveCount(2);
   await expect(page.getByText("4 teams")).toHaveCount(4);
 
   await page.getByRole("link", { name: "All leagues" }).click();
