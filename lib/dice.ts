@@ -9,6 +9,12 @@ export function ascendingKey(a: Die, b: Die): string {
   return a <= b ? `${a}-${b}` : `${b}-${a}`;
 }
 
+// Every ascending read of 2d6, in table order: 1-1, 1-2 and so on to 6-6.
+export const ASCENDING_KEYS: string[] = [];
+for (let low = 1; low <= 6; low++) {
+  for (let high = low; high <= 6; high++) ASCENDING_KEYS.push(`${low}-${high}`);
+}
+
 export function rollD6(rng: Rng): Die {
   return (Math.floor(rng() * 6) + 1) as Die;
 }

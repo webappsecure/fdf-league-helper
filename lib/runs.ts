@@ -1,6 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
+import type { XpKickDistance } from "@/lib/league-setup";
 import { generateSeason, type GenerationLogEntry } from "@/lib/rules/generation";
 
 export type GenerateResult =
@@ -16,14 +17,20 @@ export type GenerationRun = {
   entries: RunLogLine[];
 };
 
-// Rolls the management values and runs the offense draft for every team of a
-// league that has not been generated yet, and saves them with the run and its log. The status check and
+// Rolls the management values and runs the inaugural draft for every team of
+// a league that has not been generated yet, and saves them with the run and
+// its log. The status check and
 // the writes share one transaction, so a league cannot be generated twice.
 export function generateLeague(db: DatabaseSync, leagueId: number, seed: number): GenerateResult {
   return transaction(db, (): GenerateResult => {
     const season = db
-      .prepare("SELECT id, status FROM season WHERE league_id = ? AND sequence = 1")
-      .get(leagueId) as { id: number; status: string } | undefined;
+      .prepare(
+        `SELECT id, status, xp_kick_distance AS xpKickDistance
+         FROM season WHERE league_id = ? AND sequence = 1`,
+      )
+      .get(leagueId) as
+      | { id: number; status: string; xpKickDistance: XpKickDistance }
+      | undefined;
     if (!season) return { ok: false, reason: "not-found" };
     if (season.status !== "setup") return { ok: false, reason: "already-generated" };
 
@@ -36,7 +43,7 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
       .all(season.id) as { franchiseId: number; teamName: string; coachName: string }[];
     if (teams.length === 0) return { ok: false, reason: "no-teams" };
 
-    const result = generateSeason(teams, seededRng(seed));
+    const result = generateSeason(teams, seededRng(seed), season.xpKickDistance);
 
     const runId = Number(
       db
@@ -57,7 +64,9 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
     const updateTeam = db.prepare(
       `UPDATE team_season
        SET ownership_style = ?, ownership_loyalty = ?, front_office_grade = ?,
-           head_coach_grade = ?, offense_profile = ?, offense_qualities = ?
+           head_coach_grade = ?, offense_profile = ?, offense_qualities = ?,
+           defense_profile = ?, defense_qualities = ?, kick_return = ?, punt_return = ?,
+           fg_range = ?, xp_range = ?
        WHERE season_id = ? AND franchise_id = ?`,
     );
     for (const team of result.teams) {
@@ -68,6 +77,12 @@ export function generateLeague(db: DatabaseSync, leagueId: number, seed: number)
         team.headCoachGrade,
         team.offenseProfile,
         JSON.stringify(team.offenseQualities),
+        team.defenseProfile,
+        JSON.stringify(team.defenseQualities),
+        team.kickReturn,
+        team.puntReturn,
+        team.fgRange,
+        team.xpRange,
         season.id,
         team.franchiseId,
       );

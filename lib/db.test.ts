@@ -53,7 +53,7 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(4);
+    expect(user_version).toBe(5);
     expect(tableNames(file)).toHaveLength(8);
   });
 
@@ -232,6 +232,8 @@ describe("openDatabase", () => {
         headCoachGrade: "B",
         offenseProfile: null,
         offenseQualities: null,
+        defenseProfile: null,
+        fgRange: null,
       }),
     ]);
     expect(getGenerationRun(db, 1)?.entries).toHaveLength(1);
@@ -239,6 +241,55 @@ describe("openDatabase", () => {
     expect(() =>
       db.exec("UPDATE team_season SET offense_profile = 'SPLENDID' WHERE id = 1"),
     ).toThrow();
+    db.close();
+  });
+
+  it("upgrades a league drafted before defense existed and keeps its offense", () => {
+    const file = path.join(dir, "v4.sqlite");
+    // A current database wound back to version 4: the six columns migration 5
+    // adds are dropped, leaving one team with its offense drafted.
+    const old = openDatabase(file);
+    old.exec(`
+      ALTER TABLE team_season DROP COLUMN defense_profile;
+      ALTER TABLE team_season DROP COLUMN defense_qualities;
+      ALTER TABLE team_season DROP COLUMN kick_return;
+      ALTER TABLE team_season DROP COLUMN punt_return;
+      ALTER TABLE team_season DROP COLUMN fg_range;
+      ALTER TABLE team_season DROP COLUMN xp_range;
+      INSERT INTO league (id, name, created_at) VALUES (1, 'Old League', '2026-01-01T00:00:00.000Z');
+      INSERT INTO season (id, league_id, sequence, label, xp_kick_distance, status, team_count)
+        VALUES (1, 1, 1, 'Season 1', 2, 'draft', 8);
+      INSERT INTO franchise (id, league_id) VALUES (1, 1);
+      INSERT INTO team_season (season_id, franchise_id, position, city, nickname,
+                               head_coach_name, primary_color, secondary_color,
+                               front_office_grade, head_coach_grade,
+                               offense_profile, offense_qualities)
+        VALUES (1, 1, 0, 'Chicago', 'Aces', 'Adam Adams', '#000000', '#ffffff', 'A', 'B',
+                'PROLIFIC', '[{"quality":"DYNAMIC","strength":"SEMI"}]');
+      PRAGMA user_version = 4;
+    `);
+    old.close();
+
+    const db = openDatabase(file);
+
+    expect(listTeams(db, 1)).toEqual([
+      expect.objectContaining({
+        city: "Chicago",
+        headCoachGrade: "B",
+        offenseProfile: "PROLIFIC",
+        offenseQualities: [{ quality: "DYNAMIC", strength: "SEMI" }],
+        defenseProfile: null,
+        defenseQualities: null,
+        kickReturn: null,
+        puntReturn: null,
+        fgRange: null,
+        xpRange: null,
+      }),
+    ]);
+    expect(() =>
+      db.exec("UPDATE team_season SET defense_profile = 'SPLENDID' WHERE id = 1"),
+    ).toThrow();
+    expect(() => db.exec("UPDATE team_season SET kick_return = 'SHOCKING' WHERE id = 1")).toThrow();
     db.close();
   });
 

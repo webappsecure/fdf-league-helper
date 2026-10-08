@@ -13,7 +13,9 @@ import type {
   OwnershipLoyalty,
   OwnershipStyle,
 } from "@/lib/reference/management-tables";
+import type { DefenseProfile, DefenseQuality } from "@/lib/reference/defense-tables";
 import type { OffenseProfile, Quality } from "@/lib/reference/offense-tables";
+import type { ReturnQuality } from "@/lib/reference/special-teams-tables";
 
 export type Team = Identity & {
   id: number;
@@ -29,15 +31,27 @@ export type Team = Identity & {
   // Null until the league is generated. Qualities are in card order.
   offenseProfile: OffenseProfile | null;
   offenseQualities: Quality[] | null;
+  defenseProfile: DefenseProfile | null;
+  defenseQualities: DefenseQuality[] | null;
+  // On a generated team a null return means it has no return quality.
+  kickReturn: ReturnQuality | null;
+  puntReturn: ReturnQuality | null;
+  // Success ranges as printed, for example "11-63".
+  fgRange: string | null;
+  xpRange: string | null;
 };
 
 // A row as SQLite returns it: the qualities are still JSON text.
-type TeamRow = Omit<Team, "offenseQualities"> & { offenseQualities: string | null };
+type TeamRow = Omit<Team, "offenseQualities" | "defenseQualities"> & {
+  offenseQualities: string | null;
+  defenseQualities: string | null;
+};
 
 function toTeam(row: TeamRow): Team {
   return {
     ...row,
     offenseQualities: row.offenseQualities === null ? null : JSON.parse(row.offenseQualities),
+    defenseQualities: row.defenseQualities === null ? null : JSON.parse(row.defenseQualities),
   };
 }
 
@@ -53,7 +67,11 @@ const TEAM_SELECT = `
          team_season.front_office_grade AS frontOfficeGrade,
          team_season.head_coach_grade AS headCoachGrade,
          team_season.offense_profile AS offenseProfile,
-         team_season.offense_qualities AS offenseQualities
+         team_season.offense_qualities AS offenseQualities,
+         team_season.defense_profile AS defenseProfile,
+         team_season.defense_qualities AS defenseQualities,
+         team_season.kick_return AS kickReturn, team_season.punt_return AS puntReturn,
+         team_season.fg_range AS fgRange, team_season.xp_range AS xpRange
   FROM team_season
 `;
 

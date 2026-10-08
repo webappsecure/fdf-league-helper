@@ -1,6 +1,17 @@
 // CE v1.5 "Create A New League" steps 8 to 11: the QV and CDV table, the
 // offense quality pairs and Table C (Appendix A, page 16).
 
+import {
+  inPairOrderOf,
+  pairIndexIn,
+  row as sharedRow,
+  type Footnote,
+  type ProfileRow,
+  type Quality as SharedQuality,
+} from "@/lib/reference/profile-tables";
+
+export { qualityLabel, type Footnote, type Strength } from "@/lib/reference/profile-tables";
+
 export type OffenseProfile = "PROLIFIC" | "PROLIFIC_SEMI" | "AVERAGE" | "DULL_SEMI" | "DULL";
 
 export const PROFILE_LABELS: Record<OffenseProfile, string> = {
@@ -22,19 +33,14 @@ export const OFFENSE_PAIRS = [
 ] as const;
 
 export type OffenseQuality = (typeof OFFENSE_PAIRS)[number][number];
-export type Strength = "FULL" | "SEMI";
-export type Quality = { quality: OffenseQuality; strength: Strength };
-
-export function qualityLabel({ quality, strength }: Quality): string {
-  return strength === "SEMI" ? `${quality}•` : quality;
-}
+export type Quality = SharedQuality<OffenseQuality>;
 
 export function pairIndex(quality: OffenseQuality): number {
-  return OFFENSE_PAIRS.findIndex((pair) => (pair as readonly string[]).includes(quality));
+  return pairIndexIn(OFFENSE_PAIRS, quality);
 }
 
 export function inPairOrder(qualities: Quality[]): Quality[] {
-  return [...qualities].sort((a, b) => pairIndex(a.quality) - pairIndex(b.quality));
+  return inPairOrderOf(OFFENSE_PAIRS, qualities);
 }
 
 // Step 8. League sizes outside 8 to 56 are not supported.
@@ -45,23 +51,8 @@ export function qvCdvFor(teamCount: number): { qv: number; cdv: number } {
   return { qv: 8, cdv: 4 };
 }
 
-export type Footnote = "a" | "b" | "c" | "d" | "e" | "f";
-export type ProfileRow = { qualities: Quality[]; footnote?: Footnote };
-
-// Writes a row the way the rulebook prints it: qualities separated by spaces,
-// a trailing bullet for SEMI.
-function row(text: string, footnote?: Footnote): ProfileRow {
-  const qualities = text
-    .split(" ")
-    .filter(Boolean)
-    .map((word): Quality => {
-      const semi = word.endsWith("•");
-      return {
-        quality: (semi ? word.slice(0, -1) : word) as OffenseQuality,
-        strength: semi ? "SEMI" : "FULL",
-      };
-    });
-  return footnote ? { qualities, footnote } : { qualities };
+function row(text: string, footnote?: Footnote): ProfileRow<OffenseQuality> {
+  return sharedRow<OffenseQuality>(text, footnote);
 }
 
 // The qualities a footnote gives to one more team drawn from the pool.
@@ -81,7 +72,7 @@ export type DraftProfile = (typeof DRAFT_PROFILES)[number];
 // Table C, one column per profile, keyed by 2d6 read in ascending order. Kept
 // exactly as printed, including the few qualities that look out of place for
 // their column (PROLIFIC• 1-1, DULL 6-6, DULL• 4-4, 5-5, 5-6 and 6-6).
-export const TABLE_C: Record<DraftProfile, Record<string, ProfileRow>> = {
+export const TABLE_C: Record<DraftProfile, Record<string, ProfileRow<OffenseQuality>>> = {
   PROLIFIC: {
     "1-1": row("", "a"),
     "1-2": row("", "a"),

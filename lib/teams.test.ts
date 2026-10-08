@@ -63,7 +63,13 @@ describe("teams created with a league", () => {
           team.frontOfficeGrade === null &&
           team.headCoachGrade === null &&
           team.offenseProfile === null &&
-          team.offenseQualities === null,
+          team.offenseQualities === null &&
+          team.defenseProfile === null &&
+          team.defenseQualities === null &&
+          team.kickReturn === null &&
+          team.puntReturn === null &&
+          team.fgRange === null &&
+          team.xpRange === null,
       ),
     ).toBe(true);
     expect(teams.every((team) => team.city && team.nickname && team.headCoachName)).toBe(true);
@@ -221,17 +227,20 @@ describe("rerollTeamField", () => {
 });
 
 describe("teams of a generated league", () => {
-  it("keep their offense when an identity field is edited or re-rolled", () => {
+  it("keep their drafted values when an identity field is edited or re-rolled", () => {
     const id = createLeague(db, setup(), seeded(1));
     generateLeague(db, id, 11);
     const [before] = listTeams(db, id);
     expect(Array.isArray(before.offenseQualities)).toBe(true);
+    expect(Array.isArray(before.defenseQualities)).toBe(true);
+    expect(before.fgRange).toMatch(/^11-/);
 
     updateTeamField(db, before.id, "city", "Renamed Town");
     const rolled = rerollTeamField(db, before.id, "nickname", seeded(3))!;
 
     expect(rolled.offenseProfile).toBe(before.offenseProfile);
     expect(rolled.offenseQualities).toEqual(before.offenseQualities);
+    expect(rolled.defenseQualities).toEqual(before.defenseQualities);
     expect(listTeams(db, id)[0]).toEqual({
       ...before,
       city: "Renamed Town",

@@ -33,9 +33,10 @@ async function managementRows(page: Page): Promise<string[][]> {
   );
 }
 
-// The text of every body cell of the offense table, row by row.
-async function offenseRows(page: Page): Promise<string[][]> {
-  const table = page.getByRole("table", { name: /offense$/ });
+// The text of every body cell of a table found by the end of its name, row by
+// row.
+async function tableRows(page: Page, name: RegExp): Promise<string[][]> {
+  const table = page.getByRole("table", { name });
   await expect(table).toBeVisible();
   return table
     .locator("tbody tr")
@@ -43,6 +44,18 @@ async function offenseRows(page: Page): Promise<string[][]> {
       elements.map((row) => Array.from(row.children, (cell) => cell.textContent ?? "")),
     );
 }
+
+function offenseRows(page: Page): Promise<string[][]> {
+  return tableRows(page, /offense$/);
+}
+
+const DEFENSE_PAIRS = [
+  ["STIFF", "SOFT"],
+  ["PUNISHING", "MILD"],
+  ["AGGRESSIVE", "MEEK"],
+  ["ACTIVE", "PASSIVE"],
+  ["DISCIPLINED", "UNDISCIPLINED"],
+];
 
 const PAIRS = [
   ["DYNAMIC", "ERRATIC"],
@@ -63,6 +76,63 @@ test("offers generation on a new league and shows no results yet", async ({ page
   await expect(page.getByRole("table", { name: /management$/ })).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 2, name: "Offense" })).toHaveCount(0);
   await expect(page.getByRole("table", { name: /offense$/ })).toHaveCount(0);
+  for (const name of ["Defense", "Special teams"]) {
+    await expect(page.getByRole("heading", { level: 2, name })).toHaveCount(0);
+  }
+  await expect(page.getByRole("table", { name: /(defense|special teams)$/ })).toHaveCount(0);
+});
+
+test("drafts a defense and special teams for every team", async ({ page }) => {
+  await createLeague(page, "Defended League");
+  await page.getByRole("button", { name: "Generate league" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Defense" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Special teams" })).toBeVisible();
+  await expect(
+    page.getByRole("table", { name: /defense$/ }).getByRole("columnheader"),
+  ).toHaveText(["Team", "Profile", "Qualities"]);
+  await expect(
+    page.getByRole("table", { name: /special teams$/ }).getByRole("columnheader"),
+  ).toHaveText(["Team", "Kick return", "Punt return", "FG", "XP"]);
+
+  const teams = (await managementRows(page)).map(([team]) => team);
+  const defense = await tableRows(page, /defense$/);
+  expect(defense.map(([team]) => team)).toEqual(teams);
+
+  const profiles = defense.map(([, profile]) => profile);
+  for (const profile of profiles) {
+    expect(["STAUNCH", "STAUNCH•", "AVERAGE", "INEPT•", "INEPT"]).toContain(profile);
+  }
+  const holding = (profile: string) => profiles.filter((held) => held === profile).length;
+  expect(holding("STAUNCH")).toBe(1);
+  expect(holding("STAUNCH•")).toBe(1);
+  expect(holding("INEPT")).toBeLessThanOrEqual(1);
+  expect(holding("INEPT•")).toBeLessThanOrEqual(1);
+
+  for (const [team, , listed] of defense) {
+    if (listed === "None") continue;
+    // One quality per pair at most, listed in card order.
+    const pairs = listed.split(", ").map((label) => {
+      const name = label.replace("•", "");
+      return DEFENSE_PAIRS.findIndex((pair) => pair.includes(name));
+    });
+    expect(pairs, `${team}: ${listed}`).not.toContain(-1);
+    expect(pairs, `${team}: ${listed}`).toEqual([...new Set(pairs)].sort((a, b) => a - b));
+  }
+
+  const special = await tableRows(page, /special teams$/);
+  expect(special.map(([team]) => team)).toEqual(teams);
+  for (const [team, kickReturn, puntReturn, fg, xp] of special) {
+    expect(["ELECTRIC", "ELECTRIC•", "None"], team).toContain(kickReturn);
+    expect(["ELECTRIC", "ELECTRIC•", "None"], team).toContain(puntReturn);
+    expect(fg, team).toMatch(/^11-(4[56]|5[1-6]|6[1-5])$/);
+    // "Season 1" is not a year, so the league kicks XP from the 2-yard line.
+    expect(xp, team).toMatch(/^11-6[3-6]$/);
+  }
+
+  await page.reload();
+  expect(await tableRows(page, /defense$/)).toEqual(defense);
+  expect(await tableRows(page, /special teams$/)).toEqual(special);
 });
 
 test("drafts an offense for every team by the rulebook's counts", async ({ page }) => {
@@ -149,6 +219,9 @@ test("keeps a log of every roll, grouped by step", async ({ page }) => {
     "Step 9: Offense profile",
     "Step 10: Remaining offense qualities",
     "Step 11: EFFICIENT and INEFFICIENT",
+    "Step 12: Defense profile",
+    "Step 13: Remaining defense qualities",
+    "Step 14: Special teams",
   ]);
 
   const rows = await managementRows(page);
@@ -182,6 +255,17 @@ test("keeps a log of every roll, grouped by step", async ({ page }) => {
   }
   await steps.nth(7).locator("summary").click();
   await expect(steps.nth(7).getByRole("listitem").filter({ hasText: "receives" })).toHaveCount(8);
+
+  // Step 14 logs four first rolls per team, and the last word on each kick is
+  // what the special teams table shows.
+  await steps.nth(10).locator("summary").click();
+  const kickLines = await steps.nth(10).getByRole("listitem").allTextContents();
+  expect(kickLines.filter((line) => / roll [1-6]-[1-6], /.test(line) && !line.includes("Spends")))
+    .toHaveLength(32);
+  for (const [team, , , fg] of await tableRows(page, /special teams$/)) {
+    const mine = kickLines.filter((line) => line.startsWith(`${team}: `) && line.includes(" FG "));
+    expect(mine.some((line) => line.includes(`, ${fg}`)), `${team} FG ${fg}`).toBe(true);
+  }
 
   const coachLines = await steps.nth(2).getByRole("listitem").allTextContents();
   for (const [index, line] of coachLines.entries()) {

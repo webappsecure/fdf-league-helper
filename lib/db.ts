@@ -94,6 +94,20 @@ const MIGRATIONS: string[] = [
   -- A JSON array of { quality, strength } in card order.
   ALTER TABLE team_season ADD COLUMN offense_qualities TEXT;
   `,
+  `
+  ALTER TABLE team_season ADD COLUMN defense_profile TEXT
+    CHECK (defense_profile IN ('STAUNCH', 'STAUNCH_SEMI', 'AVERAGE', 'INEPT_SEMI', 'INEPT'));
+  -- A JSON array of { quality, strength } in card order.
+  ALTER TABLE team_season ADD COLUMN defense_qualities TEXT;
+  -- Null on a generated team means no return quality.
+  ALTER TABLE team_season ADD COLUMN kick_return TEXT
+    CHECK (kick_return IN ('ELECTRIC', 'ELECTRIC_SEMI'));
+  ALTER TABLE team_season ADD COLUMN punt_return TEXT
+    CHECK (punt_return IN ('ELECTRIC', 'ELECTRIC_SEMI'));
+  -- Success ranges as printed in Table E, for example 11-63.
+  ALTER TABLE team_season ADD COLUMN fg_range TEXT;
+  ALTER TABLE team_season ADD COLUMN xp_range TEXT;
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

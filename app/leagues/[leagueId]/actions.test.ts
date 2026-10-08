@@ -44,6 +44,12 @@ const team: Team = {
   headCoachGrade: null,
   offenseProfile: null,
   offenseQualities: null,
+  defenseProfile: null,
+  defenseQualities: null,
+  kickReturn: null,
+  puntReturn: null,
+  fgRange: null,
+  xpRange: null,
 };
 
 function failing(): never {

@@ -5,7 +5,9 @@ import { seededRng } from "@/lib/dice";
 import type { LeagueSetupInput } from "@/lib/league-setup";
 import { createLeague, deleteLeague } from "@/lib/leagues";
 import { basePoints } from "@/lib/reference/management-tables";
+import { DEFENSE_PAIRS } from "@/lib/reference/defense-tables";
 import { pairIndex } from "@/lib/reference/offense-tables";
+import { pairIndexIn } from "@/lib/reference/profile-tables";
 import { GENERATION_STEPS } from "@/lib/rules/generation";
 import { generateLeague, getGenerationRun } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
@@ -20,11 +22,15 @@ afterEach(() => {
   db.close();
 });
 
-function league(teamCount = 8, identitySeed = 1): number {
+function league(
+  teamCount = 8,
+  identitySeed = 1,
+  xpKickDistance: LeagueSetupInput["xpKickDistance"] = 2,
+): number {
   const input: LeagueSetupInput = {
     name: "Continental League",
     seasonLabel: "Season 1",
-    xpKickDistance: 2,
+    xpKickDistance,
     teamCount,
     structure: { kind: "none" },
   };
@@ -54,6 +60,18 @@ function management(leagueId: number) {
 
 function offense(leagueId: number) {
   return listTeams(db, leagueId).map((team) => [team.offenseProfile, team.offenseQualities]);
+}
+
+// Defense and special teams, the values of steps 12 to 14.
+function drafted(leagueId: number) {
+  return listTeams(db, leagueId).map((team) => [
+    team.defenseProfile,
+    team.defenseQualities,
+    team.kickReturn,
+    team.puntReturn,
+    team.fgRange,
+    team.xpRange,
+  ]);
 }
 
 describe("generateLeague", () => {
@@ -130,18 +148,70 @@ describe("generateLeague", () => {
     expect(entries.slice(41).every((entry) => entry.franchiseId === null || known.has(entry.franchiseId))).toBe(true);
   });
 
+  it("saves every team's defense and special teams", () => {
+    const id = league(10);
+
+    generateLeague(db, id, 4242);
+
+    const teams = listTeams(db, id);
+    for (const team of teams) {
+      expect(["STAUNCH", "STAUNCH_SEMI", "AVERAGE", "INEPT_SEMI", "INEPT"]).toContain(
+        team.defenseProfile,
+      );
+      const pairs = team.defenseQualities!.map((entry) =>
+        pairIndexIn(DEFENSE_PAIRS, entry.quality),
+      );
+      expect(pairs).not.toContain(-1);
+      expect(pairs).toEqual([...new Set(pairs)].sort((a, b) => a - b));
+      expect(["ELECTRIC", "ELECTRIC_SEMI", null]).toContain(team.kickReturn);
+      expect(["ELECTRIC", "ELECTRIC_SEMI", null]).toContain(team.puntReturn);
+      expect(team.fgRange).toMatch(/^11-[4-6][1-6]$/);
+      expect(team.xpRange).toMatch(/^11-6[3-6]$/);
+    }
+    expect(teams.filter((team) => team.defenseProfile === "STAUNCH")).toHaveLength(1);
+    expect(teams.filter((team) => team.defenseProfile === "STAUNCH_SEMI")).toHaveLength(1);
+
+    // Each team's four first rolls are logged in team order.
+    const rolls = getGenerationRun(db, id)!.entries.filter(
+      (entry) => entry.step === "special-teams" && entry.message.includes("Kickoff return roll"),
+    );
+    expect(rolls.map((entry) => entry.franchiseId)).toEqual(teams.map((team) => team.franchiseId));
+  });
+
+  it("takes each league's XP range from the column for its kick distance", () => {
+    // Seeds chosen only to give enough teams; the columns share 11-61 to 11-66
+    // only above 11-62, so any 11-56, 11-61 or 11-62 proves the 15-yard column.
+    const xp = (distance: 2 | 15) =>
+      [1, 2, 3, 4, 5, 6].flatMap((seed) => {
+        const id = league(8, seed, distance);
+        generateLeague(db, id, seed);
+        return listTeams(db, id).map((team) => team.xpRange!);
+      });
+
+    expect(xp(2).every((range) => /^11-6[3-6]$/.test(range))).toBe(true);
+    expect(xp(15).some((range) => /^11-(56|61|62)$/.test(range))).toBe(true);
+  });
+
   it("stores qualities as JSON text in card order", () => {
     const id = league();
     generateLeague(db, id, 9);
 
     const stored = db
-      .prepare("SELECT offense_qualities AS json FROM team_season ORDER BY position")
-      .all() as { json: string }[];
+      .prepare(
+        `SELECT offense_qualities AS offense, defense_qualities AS defense
+         FROM team_season ORDER BY position`,
+      )
+      .all() as { offense: string; defense: string }[];
 
-    expect(stored.map((row) => JSON.parse(row.json))).toEqual(
+    expect(stored.map((row) => JSON.parse(row.offense))).toEqual(
       listTeams(db, id).map((team) => team.offenseQualities),
     );
-    expect(stored.every((row) => row.json.startsWith("["))).toBe(true);
+    expect(stored.map((row) => JSON.parse(row.defense))).toEqual(
+      listTeams(db, id).map((team) => team.defenseQualities),
+    );
+    expect(stored.every((row) => row.offense.startsWith("[") && row.defense.startsWith("["))).toBe(
+      true,
+    );
   });
 
   it("saves nothing when a team's values cannot be stored", () => {
@@ -158,6 +228,7 @@ describe("generateLeague", () => {
     expect(status(id)).toBe("setup");
     expect([count("run"), count("run_log_entry")]).toEqual([0, 0]);
     expect(listTeams(db, id).every((team) => team.offenseProfile === null)).toBe(true);
+    expect(drafted(id).flat().every((value) => value === null)).toBe(true);
     expect(management(id).flat().every((value) => value === null)).toBe(true);
     expect(db.isTransaction).toBe(false);
   });
@@ -194,6 +265,7 @@ describe("generateLeague", () => {
 
     expect(management(second)).toEqual(management(first));
     expect(offense(second)).toEqual(offense(first));
+    expect(drafted(second)).toEqual(drafted(first));
     expect(getGenerationRun(db, second)!.entries.map((entry) => entry.message)).toEqual(
       getGenerationRun(db, first)!.entries.map((entry) => entry.message),
     );
@@ -236,6 +308,7 @@ describe("generateLeague", () => {
     expect(getGenerationRun(db, untouched)).toBeNull();
     expect(management(untouched).flat().every((value) => value === null)).toBe(true);
     expect(offense(untouched).flat().every((value) => value === null)).toBe(true);
+    expect(drafted(untouched).flat().every((value) => value === null)).toBe(true);
   });
 });
 
