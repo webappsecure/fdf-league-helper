@@ -54,10 +54,11 @@ Package manager: npm (`package-lock.json`).
 - Test: `npm test` (Vitest, runs once)
 - Test watch: `npm run test:watch`
 - Browser tests: `npm run test:browser` (Playwright, Chromium; builds the app and starts its own server on port 3100 with a throwaway database)
+- Verify: `npm run verify` (lint, unit tests, then browser tests, which include the production build; stops at the first failure)
 
 Unit tests live next to the code they cover as `*.test.ts`. Browser tests live in
-`e2e/` as `*.spec.ts`. No typecheck, format, or `Verify` command is configured,
-and there are no GitHub workflows.
+`e2e/` as `*.spec.ts`. The build type-checks the project; no separate typecheck or
+format command is configured, and there are no GitHub workflows.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
