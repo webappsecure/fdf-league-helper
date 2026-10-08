@@ -32,11 +32,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
         <header className="border-b border-border">
-          <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-6 py-4">
-            <ThemeToggle />
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-6 py-4">
             <Link href="/" className="text-lg font-semibold">
               FDF League Helper
             </Link>
+            <ThemeToggle />
           </div>
         </header>
         <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">{children}</main>

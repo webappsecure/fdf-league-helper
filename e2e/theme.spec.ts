@@ -75,17 +75,24 @@ for (const [scheme, expected, errorSurface] of [
 test.describe("theme toggle", () => {
   test.use({ colorScheme: "light" });
 
-  test("is the first and leftmost item in the header", async ({ page }) => {
+  test("is the last item in the header, at its right edge", async ({ page }) => {
     await page.goto("/");
     const toggle = page.getByRole("button", { name: TOGGLE_NAME });
     const appName = page.getByRole("link", { name: "FDF League Helper" });
+    const bar = page.locator("header > div");
 
-    await expect(page.locator("header").locator("button, a").first()).toHaveAccessibleName(
+    await expect(page.locator("header").locator("button, a").last()).toHaveAccessibleName(
       TOGGLE_NAME,
     );
     const toggleBox = await toggle.boundingBox();
     const nameBox = await appName.boundingBox();
-    expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(nameBox!.x);
+    const barBox = await bar.boundingBox();
+    const paddingRight = await bar.evaluate((el) => parseFloat(getComputedStyle(el).paddingRight));
+    expect(toggleBox!.x).toBeGreaterThanOrEqual(nameBox!.x + nameBox!.width);
+    expect(toggleBox!.x + toggleBox!.width).toBeCloseTo(
+      barBox!.x + barBox!.width - paddingRight,
+      0,
+    );
   });
 
   test("switches to dark and back, and remembers the choice", async ({ page }) => {
