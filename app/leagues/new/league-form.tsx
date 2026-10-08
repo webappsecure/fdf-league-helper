@@ -15,9 +15,9 @@ type ConferenceRow = { key: number; name: string; divisions: DivisionRow[] };
 type StructureKind = "none" | "divisions" | "conferences";
 
 const INPUT_CLASS =
-  "w-full rounded border border-zinc-400 px-3 py-2 aria-[invalid=true]:border-red-700";
+  "w-full rounded border border-border-strong px-3 py-2 aria-[invalid=true]:border-danger";
 const SECONDARY_BUTTON =
-  "rounded border border-zinc-400 px-3 py-1.5 text-sm font-medium hover:bg-zinc-100";
+  "rounded border border-border-strong px-3 py-1.5 text-sm font-medium hover:bg-hover";
 
 const STRUCTURE_OPTIONS: { kind: StructureKind; label: string }[] = [
   { kind: "none", label: "No divisions" },
@@ -33,7 +33,7 @@ function FieldMessage({ field, errors }: { field: string; errors: FieldError[] }
   const message = errors.find((error) => error.field === field)?.message;
   if (!message) return null;
   return (
-    <p id={`error-${field}`} className="mt-1 text-sm text-red-700">
+    <p id={`error-${field}`} className="mt-1 text-sm text-danger">
       {message}
     </p>
   );
@@ -183,7 +183,7 @@ export function LeagueForm() {
           ref={summaryRef}
           tabIndex={-1}
           role="alert"
-          className="rounded border border-red-700 bg-red-50 p-4 text-red-900"
+          className="rounded border border-danger bg-danger-surface p-4 text-danger-text"
         >
           <p className="font-medium">
             {state.error ?? "The league was not created. Fix the following:"}
@@ -220,7 +220,7 @@ export function LeagueForm() {
         <label htmlFor="field-seasonLabel" className="block font-medium">
           Season label
         </label>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-muted">
           Printed on team cards, for example &quot;Season 1&quot; or &quot;2016&quot;.
         </p>
         <input
@@ -235,7 +235,7 @@ export function LeagueForm() {
 
       <fieldset id="field-xpKickDistance" tabIndex={-1}>
         <legend className="font-medium">Extra point kick distance</legend>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-muted">
           Defaults to the 15-yard line when the season label is a year from 2015 on.
         </p>
         <div className="mt-2 flex gap-6">
@@ -258,7 +258,7 @@ export function LeagueForm() {
         <label htmlFor="field-teamCount" className="block font-medium">
           Number of teams
         </label>
-        <p className="text-sm text-zinc-600">
+        <p className="text-sm text-muted">
           From {MIN_TEAMS} to {MAX_TEAMS}.
         </p>
         <input
@@ -313,7 +313,7 @@ export function LeagueForm() {
                   key={conference.key}
                   id={`field-${divisionsField}`}
                   tabIndex={-1}
-                  className="space-y-3 rounded border border-zinc-300 p-4"
+                  className="space-y-3 rounded border border-border p-4"
                 >
                   <div className="flex flex-wrap items-start gap-3">
                     <div className="min-w-48 flex-1">
@@ -368,7 +368,7 @@ export function LeagueForm() {
         )}
 
         {kind !== "none" && (
-          <p className="mt-3 text-sm text-zinc-600" aria-live="polite">
+          <p className="mt-3 text-sm text-muted" aria-live="polite">
             {assigned} of {Number(teamCount) || 0} teams assigned to divisions.
           </p>
         )}
@@ -378,7 +378,7 @@ export function LeagueForm() {
       <button
         type="submit"
         disabled={pending}
-        className="rounded bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800 disabled:opacity-60"
+        className="rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
       >
         {pending ? "Creating league..." : "Create league"}
       </button>

@@ -9,9 +9,9 @@ function DivisionList({ divisions }: { divisions: DivisionDetail[] }) {
   return (
     <ul className="mt-1 space-y-1">
       {divisions.map((division) => (
-        <li key={division.id} className="flex justify-between border-b border-zinc-200 py-1">
+        <li key={division.id} className="flex justify-between border-b border-border py-1">
           <span>{division.name}</span>
-          <span className="text-zinc-600">{division.teamCount} teams</span>
+          <span className="text-muted">{division.teamCount} teams</span>
         </li>
       ))}
     </ul>
@@ -31,18 +31,18 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
       <h1 className="text-2xl font-semibold">{league.name}</h1>
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        <dt className="text-zinc-600">Season</dt>
+        <dt className="text-muted">Season</dt>
         <dd>{league.seasonLabel}</dd>
-        <dt className="text-zinc-600">Teams</dt>
+        <dt className="text-muted">Teams</dt>
         <dd>{league.teamCount}</dd>
-        <dt className="text-zinc-600">Extra point kick</dt>
+        <dt className="text-muted">Extra point kick</dt>
         <dd>{league.xpKickDistance}-yard line</dd>
       </dl>
 
       <section className="mt-8">
         <h2 className="text-lg font-semibold">Structure</h2>
         {!hasStructure && (
-          <p className="mt-1 text-zinc-600">
+          <p className="mt-1 text-muted">
             {league.teamCount} teams with no conferences or divisions.
           </p>
         )}
@@ -55,7 +55,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         {league.divisions.length > 0 && <DivisionList divisions={league.divisions} />}
       </section>
 
-      <section className="mt-10 border-t border-zinc-200 pt-6">
+      <section className="mt-10 border-t border-border pt-6">
         <DeleteLeague leagueId={league.id} name={league.name} />
       </section>
     </>
@@ -66,11 +66,11 @@ export default function LeaguePage({ params }: PageProps<"/leagues/[leagueId]">)
   return (
     <>
       <p className="mb-2 text-sm">
-        <Link href="/" className="text-blue-700 underline">
+        <Link href="/" className="text-link underline">
           All leagues
         </Link>
       </p>
-      <Suspense fallback={<p className="text-zinc-600">Loading league...</p>}>
+      <Suspense fallback={<p className="text-muted">Loading league...</p>}>
         <LeagueDetails params={params} />
       </Suspense>
     </>

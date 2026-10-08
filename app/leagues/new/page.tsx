@@ -5,7 +5,7 @@ export default function NewLeaguePage() {
   return (
     <>
       <p className="mb-2 text-sm">
-        <Link href="/" className="text-blue-700 underline">
+        <Link href="/" className="text-link underline">
           All leagues
         </Link>
       </p>

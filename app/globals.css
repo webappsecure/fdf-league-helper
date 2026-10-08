@@ -1,13 +1,56 @@
 @import "tailwindcss";
 
+/*
+ * Color tokens. Each has a light and a dark value; light-dark() picks one from
+ * the element's color-scheme. With no data-theme the scheme follows the system,
+ * and the header toggle pins it by setting data-theme on <html>.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light dark;
+
+  --background: light-dark(#ffffff, #0a0a0a);
+  --foreground: light-dark(#171717, #ededed);
+  --muted: light-dark(#52525c, #a1a1aa);
+  --border: light-dark(#e4e4e7, #27272a);
+  --border-strong: light-dark(#9f9fa9, #71717a);
+  --hover: light-dark(#f4f4f5, #27272a);
+  --primary: light-dark(#1447e6, #155dfc);
+  --primary-hover: light-dark(#193cb8, #1447e6);
+  --on-primary: #ffffff;
+  --link: light-dark(#1447e6, #51a2ff);
+  --danger: light-dark(#c10007, #ff6467);
+  --danger-solid: #c10007;
+  --danger-hover: #9f0712;
+  --danger-surface: light-dark(#fef2f2, #460809);
+  --danger-text: light-dark(#82181a, #ffc9c9);
+  --backdrop: light-dark(rgb(0 0 0 / 0.4), rgb(0 0 0 / 0.6));
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-hover: var(--hover);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-on-primary: var(--on-primary);
+  --color-link: var(--link);
+  --color-danger: var(--danger);
+  --color-danger-solid: var(--danger-solid);
+  --color-danger-hover: var(--danger-hover);
+  --color-danger-surface: var(--danger-surface);
+  --color-danger-text: var(--danger-text);
+  --color-backdrop: var(--backdrop);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,4 +59,13 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* The toggle shows the mode a click switches to, with no React state. */
+.theme-icon-moon {
+  color: light-dark(var(--foreground), transparent);
+}
+
+.theme-icon-sun {
+  color: light-dark(transparent, var(--foreground));
 }

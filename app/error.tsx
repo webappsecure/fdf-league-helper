@@ -16,13 +16,13 @@ export default function ErrorPage({
   return (
     <div role="alert">
       <h1 className="text-2xl font-semibold">Something went wrong</h1>
-      <p className="mt-2 text-zinc-600">
+      <p className="mt-2 text-muted">
         The page could not be loaded. Your saved leagues have not been changed.
       </p>
       <button
         type="button"
         onClick={() => retry()}
-        className="mt-4 rounded border border-zinc-400 px-4 py-2 font-medium hover:bg-zinc-100"
+        className="mt-4 rounded border border-border-strong px-4 py-2 font-medium hover:bg-hover"
       >
         Try again
       </button>

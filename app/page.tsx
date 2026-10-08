@@ -11,9 +11,9 @@ async function LeagueList() {
 
   if (leagues.length === 0) {
     return (
-      <p className="rounded border border-dashed border-zinc-300 p-6 text-zinc-600">
+      <p className="rounded border border-dashed border-border p-6 text-muted">
         No leagues yet.{" "}
-        <Link href="/leagues/new" className="font-medium text-blue-700 underline">
+        <Link href="/leagues/new" className="font-medium text-link underline">
           Create your first league
         </Link>
         .
@@ -24,7 +24,7 @@ async function LeagueList() {
   return (
     <table className="w-full border-collapse text-left">
       <thead>
-        <tr className="border-b border-zinc-300 text-sm text-zinc-600">
+        <tr className="border-b border-border text-sm text-muted">
           <th scope="col" className="py-2 pr-4 font-medium">
             League
           </th>
@@ -38,11 +38,11 @@ async function LeagueList() {
       </thead>
       <tbody>
         {leagues.map((league) => (
-          <tr key={league.id} className="border-b border-zinc-200">
+          <tr key={league.id} className="border-b border-border">
             <td className="py-2 pr-4">
               <Link
                 href={`/leagues/${league.id}`}
-                className="font-medium text-blue-700 underline"
+                className="font-medium text-link underline"
               >
                 {league.name}
               </Link>
@@ -63,12 +63,12 @@ export default function Home() {
         <h1 className="text-2xl font-semibold">Leagues</h1>
         <Link
           href="/leagues/new"
-          className="rounded bg-blue-700 px-4 py-2 font-medium text-white hover:bg-blue-800"
+          className="rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover"
         >
           New league
         </Link>
       </div>
-      <Suspense fallback={<p className="text-zinc-600">Loading leagues...</p>}>
+      <Suspense fallback={<p className="text-muted">Loading leagues...</p>}>
         <LeagueList />
       </Suspense>
     </>

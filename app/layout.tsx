@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
+import { THEME_INIT_SCRIPT } from "./theme";
+import { ThemeToggle } from "./theme-toggle";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,10 +26,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      // The inline script below may set data-theme before React hydrates.
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
-        <header className="border-b border-zinc-200">
-          <div className="mx-auto w-full max-w-3xl px-6 py-4">
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+        <header className="border-b border-border">
+          <div className="mx-auto flex w-full max-w-3xl items-center gap-3 px-6 py-4">
+            <ThemeToggle />
             <Link href="/" className="text-lg font-semibold">
               FDF League Helper
             </Link>
