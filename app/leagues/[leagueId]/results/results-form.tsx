@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
 import type { LeagueDetail } from "@/lib/leagues";
-import type { ResultError, ResultField, TeamResult } from "@/lib/results";
+import type { ResultError, ResultField, TeamFieldError, TeamResult } from "@/lib/results";
 import type { Team } from "@/lib/teams";
 import { saveSeasonResultsAction } from "../actions";
 import { LeagueGroups } from "../league-groups";
@@ -134,7 +134,9 @@ export function ResultsForm({
             const name = teamName.get(team.id) as string;
             const row = rows[team.id];
             const idOf = (field: ResultField) => `${summaryId}-${team.id}-${field}`;
-            const teamErrors = errors.filter((error) => error.teamId === team.id);
+            const teamErrors = errors.filter(
+              (error): error is TeamFieldError => error.teamId === team.id,
+            );
             // Points an input at its own message only when it has one.
             const flag = (field: ResultField) =>
               errorOf(team.id, field)
@@ -147,7 +149,7 @@ export function ResultsForm({
                   {teamErrors.map((error) => (
                     <p
                       key={error.field}
-                      id={idOf(error.field as ResultField)}
+                      id={idOf(error.field)}
                       className="mt-1 text-xs text-danger"
                     >
                       {error.message}

@@ -27,9 +27,11 @@ export type TeamResult = {
 
 export type ResultField = "wins" | "losses" | "ties" | "playoffs";
 
-// `teamId` and `field` are null for an error that belongs to the whole league,
-// and `field` is null for one that belongs to a team as a whole.
-export type ResultError = { teamId: number | null; field: ResultField | null; message: string };
+export type LeagueError = { teamId: null; field: null; message: string };
+export type TeamFieldError = { teamId: number; field: ResultField; message: string };
+
+// An error is either about the whole league or about one field of one team.
+export type ResultError = LeagueError | TeamFieldError;
 
 export type ResultsValidation =
   | { ok: true; results: TeamResult[] }

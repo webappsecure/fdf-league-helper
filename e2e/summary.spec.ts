@@ -1,3 +1,4 @@
+import { DatabaseSync } from "node:sqlite";
 import { expect, test, type Page } from "@playwright/test";
 
 // Specs share one database and run in parallel, so every league name is unique.
@@ -223,4 +224,35 @@ test("titles a panel one level under its conference heading", async ({ page }) =
   await expect(page.getByRole("heading", { level: 3, name: "American" })).toBeVisible();
   await expect(panels(page)).toHaveCount(8);
   await expect(page.getByRole("heading", { level: 4 })).toHaveCount(8);
+});
+
+test("says Not drafted for the parts a league generated before the drafts lacks", async ({
+  page,
+}) => {
+  const url = await createDraft(page, "Undrafted Panels");
+  await accept(page);
+
+  // The browser run's own database, as playwright.config.ts names it. Clearing
+  // these columns gives the state of a league generated before those drafts.
+  const leagueId = Number(new URL(url).pathname.split("/").pop());
+  const db = new DatabaseSync("data/browser-tests.sqlite");
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    db.prepare(
+      `UPDATE team_season SET offense_profile = NULL, offense_qualities = NULL,
+         defense_profile = NULL, defense_qualities = NULL, kick_return = NULL,
+         punt_return = NULL, fg_range = NULL, xp_range = NULL
+       WHERE season_id IN (SELECT id FROM season WHERE league_id = ?)`,
+    ).run(leagueId);
+  } finally {
+    db.close();
+  }
+
+  await page.goto(`${url}?view=summary`);
+  const panel = panels(page).first();
+  for (const label of ["Offense", "Defense", "Kick return", "Punt return", "FG range", "XP range"]) {
+    await expect(panel.locator(`dt:text-is("${label}") + dd`)).toHaveText("Not drafted");
+  }
+  // The management rolls are still there.
+  await expect(panel.locator('dt:text-is("Base FP") + dd')).not.toHaveText("Not drafted");
 });

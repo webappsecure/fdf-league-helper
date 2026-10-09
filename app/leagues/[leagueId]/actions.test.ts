@@ -208,6 +208,8 @@ describe("updateTeamFieldAction", () => {
     });
     expect(updateTeamField).toHaveBeenCalledWith({}, 7, "primaryColor", "#ffb612");
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/cards", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/results", "page");
   });
 });
 
@@ -268,6 +270,7 @@ describe("updateLeagueTextAction", () => {
     expect(updateSeasonLabel).not.toHaveBeenCalled();
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/cards", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/results", "page");
     expect(revalidatePath).toHaveBeenCalledWith("/");
   });
 
@@ -354,6 +357,7 @@ describe("renameGroupAction", () => {
     expect(renameDivision).toHaveBeenCalledWith({}, 5, "Metro");
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/cards", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/results", "page");
   });
 });
 
