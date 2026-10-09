@@ -120,7 +120,7 @@ describe("startOffseason", () => {
     expect(draft.log.length).toBeGreaterThan(0);
   });
 
-  it("copies the divisions and leaves the special teams empty", () => {
+  it("copies the divisions", () => {
     const id = readyLeague(TWO_DIVISIONS);
     startOffseason(db, id, 5);
     const rows = db
@@ -134,12 +134,29 @@ describe("startOffseason", () => {
       { name: "East", teamCount: 4 },
       { name: "West", teamCount: 4 },
     ]);
-    const filled = count(
-      `SELECT COUNT(*) AS total FROM team_season JOIN season ON season.id = season_id
-       WHERE season.sequence = 2 AND (kick_return IS NOT NULL OR punt_return IS NOT NULL
-         OR fg_range IS NOT NULL OR xp_range IS NOT NULL)`,
-    );
-    expect(filled).toBe(0);
+  });
+
+  it("saves special teams on every team, loses the FP left, and repeats from the seed", () => {
+    const id = readyLeague(undefined, 9);
+    startOffseason(db, id, 5);
+    const read = () => getOffseasonDraft(db, id)!.teams.map((team) => ({ ...team, id: 0 }));
+    const teams = read();
+
+    expect(teams).toHaveLength(9);
+    for (const team of teams) {
+      expect(["ELECTRIC", "ELECTRIC_SEMI", null]).toContain(team.kickReturn);
+      expect(["ELECTRIC", "ELECTRIC_SEMI", null]).toContain(team.puntReturn);
+      expect(team.fgRange).toMatch(/^11-[1-6][1-6]$/);
+      expect(team.xpRange).toMatch(/^11-[1-6][1-6]$/);
+      expect(team.franchisePoints).toBe(0);
+    }
+    const steps = new Set(getOffseasonDraft(db, id)!.log.map((line) => line.step));
+    expect(steps).toContain("camp-special-teams");
+    expect(steps).toContain("camp-events");
+    expect(steps).toContain("camp-sale-move");
+
+    rerollOffseason(db, id, 5);
+    expect(read()).toEqual(teams);
   });
 
   it("saves each team's new profiles, qualities and special results after the coach steps", () => {
@@ -164,7 +181,7 @@ describe("startOffseason", () => {
     // and each team's previous profile named in its first Table J line.
     expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
     const steps = [...new Set(draft.log.map((line) => line.step))];
-    expect(steps.slice(-8)).toEqual([
+    expect(steps.slice(-11)).toEqual([
       "offense-profile",
       "defense-profile",
       "camp-front-office",
@@ -173,6 +190,9 @@ describe("startOffseason", () => {
       "camp-offense-qualities",
       "camp-efficiency",
       "camp-defense-qualities",
+      "camp-special-teams",
+      "camp-events",
+      "camp-sale-move",
     ]);
     expect(steps.indexOf("ownership-impact")).toBeLessThan(steps.indexOf("offense-profile"));
     const labels: Record<string, string> = {

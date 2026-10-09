@@ -1,4 +1,4 @@
-import { ascendingKey, rollD6 } from "@/lib/dice";
+import { ascendingKey, rollD6, type Rng } from "@/lib/dice";
 import type { XpKickDistance } from "@/lib/league-setup";
 import {
   TABLE_E,
@@ -11,7 +11,7 @@ import type { Draft, SpecialTeams } from "@/lib/rules/draft";
 
 // One of a team's four results, as the re-roll loop sees it: what the team
 // holds, its chance of improving, and how to look a new roll up and keep it.
-type Slot = {
+export type Slot = {
   label: string;
   held: () => SpecialTeamsResult;
   ways: () => number;
@@ -21,7 +21,7 @@ type Slot = {
 
 // Ties a slot to one column, so it is scored on the rows it re-rolls on, and a
 // return quality can only be kept as a return quality and a range as a range.
-function slot<Result extends SpecialTeamsResult>(
+export function slot<Result extends SpecialTeamsResult>(
   label: string,
   rows: Record<string, Result>,
   held: () => Result,
@@ -36,6 +36,40 @@ function slot<Result extends SpecialTeamsResult>(
   };
 }
 
+export function rollKey(rng: Rng): string {
+  return ascendingKey(rollD6(rng), rollD6(rng));
+}
+
+// Spends a team's leftover Franchise Points one at a time on re-rolls, always of
+// the slot with the best chance of improving, keeping the better of the old and
+// new result. Points still unspent when nothing can improve are lost.
+export function spendPoints(
+  team: { teamName: string; points: number },
+  slots: Slot[],
+  rng: Rng,
+  say: (message: string) => void,
+): void {
+  while (team.points > 0) {
+    const ways = slots.map((each) => each.ways());
+    const most = Math.max(...ways);
+    if (slots.length === 0 || most === 0) break;
+    const weakest = slots[ways.indexOf(most)];
+    const held = weakest.held();
+
+    team.points -= 1;
+    const key = rollKey(rng);
+    const rolled = weakest.lookUp(key);
+    const improved = isBetter(rolled, held);
+    if (improved) weakest.keep(key);
+    say(
+      `${team.teamName}: Spends 1 FP to re-roll ${weakest.label} (${resultLabel(held)}). ` +
+        `Roll ${key}, ${resultLabel(rolled)}: ` +
+        `${improved ? "kept" : `keeps ${resultLabel(held)}`}. ${team.points} FP left.`,
+    );
+  }
+  if (team.points > 0) say(`${team.teamName}: ${team.points} FP unused and lost.`);
+}
+
 // Step 14. Each team rolls on four Table E columns, then spends leftover
 // Franchise Points one at a time on re-rolls, always of the result with the
 // best chance of improving, and keeps the better of the old and new result.
@@ -47,7 +81,7 @@ export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): 
   return draft.cards.map((card) => {
     const say = (message: string) =>
       draft.log.push({ step: "special-teams", franchiseId: card.franchiseId, message });
-    const roll = () => ascendingKey(rollD6(draft.rng), rollD6(draft.rng));
+    const roll = () => rollKey(draft.rng);
     const first = <Result extends SpecialTeamsResult>(
       label: string,
       rows: Record<string, Result>,
@@ -65,40 +99,41 @@ export function rollSpecialTeams(draft: Draft, xpKickDistance: XpKickDistance): 
       xpRange: first("XP", TABLE_E[xpColumn]),
     };
     const slots = [
-      slot("Kickoff return", TABLE_E.kickReturn, () => special.kickReturn, (result) => {
-        special.kickReturn = result;
-      }),
-      slot("Punt return", TABLE_E.puntReturn, () => special.puntReturn, (result) => {
-        special.puntReturn = result;
-      }),
-      slot("FG", TABLE_E.fg, () => special.fgRange, (result) => {
-        special.fgRange = result;
-      }),
-      slot("XP", TABLE_E[xpColumn], () => special.xpRange, (result) => {
-        special.xpRange = result;
-      }),
+      slot(
+        "Kickoff return",
+        TABLE_E.kickReturn,
+        () => special.kickReturn,
+        (result) => {
+          special.kickReturn = result;
+        },
+      ),
+      slot(
+        "Punt return",
+        TABLE_E.puntReturn,
+        () => special.puntReturn,
+        (result) => {
+          special.puntReturn = result;
+        },
+      ),
+      slot(
+        "FG",
+        TABLE_E.fg,
+        () => special.fgRange,
+        (result) => {
+          special.fgRange = result;
+        },
+      ),
+      slot(
+        "XP",
+        TABLE_E[xpColumn],
+        () => special.xpRange,
+        (result) => {
+          special.xpRange = result;
+        },
+      ),
     ];
 
-    while (card.points > 0) {
-      const ways = slots.map((each) => each.ways());
-      const most = Math.max(...ways);
-      if (most === 0) break;
-      const weakest = slots[ways.indexOf(most)];
-      const held = weakest.held();
-
-      card.points -= 1;
-      const key = roll();
-      const rolled = weakest.lookUp(key);
-      const improved = isBetter(rolled, held);
-      if (improved) weakest.keep(key);
-      say(
-        `${card.teamName}: Spends 1 FP to re-roll ${weakest.label} (${resultLabel(held)}). ` +
-          `Roll ${key}, ${resultLabel(rolled)}: ` +
-          `${improved ? "kept" : `keeps ${resultLabel(held)}`}. ${card.points} FP left.`,
-      );
-    }
-
-    if (card.points > 0) say(`${card.teamName}: ${card.points} FP unused and lost.`);
+    spendPoints(card, slots, draft.rng, say);
     return special;
   });
 }

@@ -15,6 +15,11 @@ const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS, ...CAMP_STEP
 
 const PROFILE_COLUMNS = ["Team", "Offense", "Defense"];
 
+const SPECIAL_COLUMNS = ["Team", "Kickoff return", "Punt return", "FG range", "XP range", "Move"];
+
+const returnText = (quality: string | null) =>
+  quality === null ? "None" : quality === "ELECTRIC" ? "ELECTRIC" : "ELECTRIC•";
+
 const COLUMNS = [
   "Team",
   "Division",
@@ -35,8 +40,8 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
         Off-season draft for {draft.seasonLabel}
       </h2>
       <p className="mt-1 text-muted">
-        The coaches, Franchise Points, and offense and defense profiles are rolled. Re-roll to run
-        it again from the same plan.
+        The coaches, profiles, qualities, special teams and training camp events are rolled. Re-roll
+        to run it again from the same plan.
       </p>
       <div className="flex flex-wrap gap-3">
         <ActionButton
@@ -113,6 +118,36 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
                     <span className="block text-muted">{team.defenseSpecialResult}</span>
                   )}
                 </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <h3 className="mt-6 text-lg font-semibold">Special teams</h3>
+      <div className="overflow-x-auto">
+        <table className="mt-2 w-full border-collapse text-sm">
+          <caption className="sr-only">Off-season draft special teams</caption>
+          <thead>
+            <tr className="border-b border-border-strong text-left">
+              {SPECIAL_COLUMNS.map((column) => (
+                <th key={column} scope="col" className="py-1 pr-2 font-medium">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {draft.teams.map((team) => (
+              <tr key={team.id} className="border-b border-border">
+                <th scope="row" className="py-1 pr-2 text-left font-normal">
+                  {team.city} {team.nickname}
+                </th>
+                <td className="py-1 pr-2">{returnText(team.kickReturn)}</td>
+                <td className="py-1 pr-2">{returnText(team.puntReturn)}</td>
+                <td className="py-1 pr-2">{team.fgRange}</td>
+                <td className="py-1 pr-2">{team.xpRange}</td>
+                <td className="py-1">{team.pendingMove ? "Move announced" : "No"}</td>
               </tr>
             ))}
           </tbody>

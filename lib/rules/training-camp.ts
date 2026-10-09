@@ -10,7 +10,7 @@ import { draftRemainingDefenseQualities } from "@/lib/rules/defense";
 import { openDraft, type Draft, type DraftStep, type DraftTeam } from "@/lib/rules/draft";
 import { draftEfficiency, draftRemainingQualities } from "@/lib/rules/offense";
 
-// CE "Season Progression" training camp steps 1 to 6, with the log steps they
+// CE "Season Progression" training camp steps 1 to 9, with the log steps they
 // write under.
 export const CAMP_STEPS = [
   "camp-front-office",
@@ -19,6 +19,9 @@ export const CAMP_STEPS = [
   "camp-offense-qualities",
   "camp-efficiency",
   "camp-defense-qualities",
+  "camp-special-teams",
+  "camp-events",
+  "camp-sale-move",
 ] as const;
 export type CampStep = (typeof CAMP_STEPS)[number];
 
@@ -29,6 +32,9 @@ export const CAMP_STEP_HEADINGS: Record<CampStep, string> = {
   "camp-offense-qualities": "Training camp step 4: Offense qualities",
   "camp-efficiency": "Training camp step 5: EFFICIENT and INEFFICIENT",
   "camp-defense-qualities": "Training camp step 6: Defense qualities",
+  "camp-special-teams": "Training camp step 7: Special teams",
+  "camp-events": "Training camp step 8: Unexpected events",
+  "camp-sale-move": "Training camp step 9: Franchise sale or move",
 };
 
 export type CampLogEntry = { step: CampStep; franchiseId: number | null; message: string };

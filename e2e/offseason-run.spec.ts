@@ -82,6 +82,9 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
     "Training camp step 4: Offense qualities",
     "Training camp step 5: EFFICIENT and INEFFICIENT",
     "Training camp step 6: Defense qualities",
+    "Training camp step 7: Special teams",
+    "Training camp step 8: Unexpected events",
+    "Training camp step 9: Franchise sale or move",
   ]) {
     await expect(page.getByText(heading)).toBeVisible();
   }
@@ -90,6 +93,17 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
   });
   await expect(profiles.getByRole("row")).toHaveCount(9);
   await expect(profiles.getByRole("columnheader")).toHaveText(["Team", "Offense", "Defense"]);
+  const special = page.getByRole("table", { name: "Off-season draft special teams" });
+  await expect(special.getByRole("row")).toHaveCount(9);
+  await expect(special.getByRole("columnheader")).toHaveText([
+    "Team",
+    "Kickoff return",
+    "Punt return",
+    "FG range",
+    "XP range",
+    "Move",
+  ]);
+  await expect(special.getByRole("cell", { name: /^11-[1-6][1-6]$/ })).toHaveCount(16);
   const before = await table.innerText();
   const profilesBefore = await profiles.innerText();
 

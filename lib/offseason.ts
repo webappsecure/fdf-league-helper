@@ -10,6 +10,10 @@ import {
 import type { Grade, OwnershipLoyalty, OwnershipStyle } from "@/lib/reference/management-tables";
 import type { DefenseProfile, DefenseQuality } from "@/lib/reference/defense-tables";
 import type { OffenseProfile, Quality } from "@/lib/reference/offense-tables";
+import type { ReturnQuality } from "@/lib/reference/special-teams-tables";
+import type { XpKickDistance } from "@/lib/league-setup";
+import { runCampSpecialTeams } from "@/lib/rules/camp-special-teams";
+import { runEvents, runSaleOrMove, type EventTeam } from "@/lib/rules/camp-events";
 import { runAnnualDraft, type AnnualLogEntry, type AnnualTeam } from "@/lib/rules/annual-draft";
 import { runCoaches, type CoachInput, type CoachLogEntry } from "@/lib/rules/coaches";
 import { runTrainingCamp, type CampLogEntry, type CampTeam } from "@/lib/rules/training-camp";
@@ -97,6 +101,10 @@ type TeamRow = {
   offenseProfile: OffenseProfile | null;
   defenseProfile: DefenseProfile | null;
   hotSeat: number;
+  kickReturn: ReturnQuality | null;
+  puntReturn: ReturnQuality | null;
+  fgRange: string | null;
+  xpRange: string | null;
   pendingMove: number;
   pendingMoveCity: string | null;
   wins: number | null;
@@ -140,6 +148,8 @@ function loadKeptTeams(db: DatabaseSync, seasonId: number): TeamRow[] {
               ownership_loyalty AS ownershipLoyalty, front_office_grade AS frontOfficeGrade,
               head_coach_grade AS headCoachGrade, hot_seat AS hotSeat,
               offense_profile AS offenseProfile, defense_profile AS defenseProfile,
+              kick_return AS kickReturn, punt_return AS puntReturn,
+              fg_range AS fgRange, xp_range AS xpRange,
               pending_move AS pendingMove, pending_move_city AS pendingMoveCity,
               wins, losses, ties, made_playoffs AS madePlayoffs, is_champion AS isChampion
        FROM team_season
@@ -238,10 +248,71 @@ function coachInputs(
   ];
 }
 
+// Training camp steps 7 to 9 on the teams as steps 1 to 6 left them. Returns
+// each team's final card values and the log.
+function runCampEnd(
+  kept: TeamRow[],
+  coached: ReturnType<typeof runCoaches>["teams"],
+  annual: ReturnType<typeof runAnnualDraft>["results"],
+  camp: ReturnType<typeof runTrainingCamp>["results"],
+  annualTeams: AnnualTeam[],
+  xpKickDistance: XpKickDistance,
+  rng: Rng,
+): { teams: EventTeam[]; log: CampLogEntry[] } {
+  const { results: special, log: specialLog } = runCampSpecialTeams(
+    annualTeams.map((team, index) => {
+      const old = kept[index];
+      const hasRanges = old?.fgRange != null && old?.xpRange != null;
+      return {
+        franchiseId: team.franchiseId,
+        teamName: team.teamName,
+        points: camp[index].pointsLeft,
+        previous: hasRanges
+          ? {
+              kickReturn: old.kickReturn,
+              puntReturn: old.puntReturn,
+              fgRange: old.fgRange!,
+              xpRange: old.xpRange!,
+            }
+          : null,
+      };
+    }),
+    xpKickDistance,
+    rng,
+  );
+  const cards: EventTeam[] = annualTeams.map((team, index) => ({
+    franchiseId: team.franchiseId,
+    teamName: team.teamName,
+    frontOfficeGrade: camp[index].frontOfficeGrade,
+    headCoachGrade: coached[index].headCoachGrade,
+    hotSeat: coached[index].hotSeat,
+    ownershipStyle: coached[index].ownershipStyle,
+    ownershipLoyalty: coached[index].ownershipLoyalty,
+    offenseProfile: annual[index].offenseProfile,
+    defenseProfile: annual[index].defenseProfile,
+    offenseQualities: camp[index].offenseQualities,
+    defenseQualities: camp[index].defenseQualities,
+    special: special[index],
+    pendingMove: false,
+  }));
+  const events = runEvents(cards, rng);
+  const sales = runSaleOrMove(events.teams, rng);
+  return {
+    teams: sales.teams,
+    log: [...specialLog, ...events.log, ...sales.log],
+  };
+}
+
 // Runs the off-season rules: the coach steps, then steps 7 and 8 with the FP the
-// coach steps left, then training camp steps 1 to 6. An expansion team has no
+// coach steps left, then training camp steps 1 to 9. An expansion team has no
 // previous profile, so it is average.
-function runRules(kept: TeamRow[], inputs: CoachInput[], taken: string[], rng: Rng) {
+function runRules(
+  kept: TeamRow[],
+  inputs: CoachInput[],
+  taken: string[],
+  xpKickDistance: XpKickDistance,
+  rng: Rng,
+) {
   const { teams: coached, log: coachLog } = runCoaches(inputs, taken, rng);
   const annualTeams: AnnualTeam[] = inputs.map((input, index) => {
     const old = kept[index];
@@ -265,11 +336,17 @@ function runRules(kept: TeamRow[], inputs: CoachInput[], taken: string[], rng: R
     defenseQualities: annual[index].defenseQualities,
   }));
   const { results: camp, log: campLog } = runTrainingCamp(campTeams, rng);
-  const log: OffseasonLogEntry[] = [...coachLog, ...annualLog, ...campLog];
-  return { coached, annual, camp, log };
+  const end = runCampEnd(kept, coached, annual, camp, annualTeams, xpKickDistance, rng);
+  const log: OffseasonLogEntry[] = [...coachLog, ...annualLog, ...campLog, ...end.log];
+  return { coached, annual, camp, teams: end.teams, log };
 }
 
-type OldDivision = { id: number; conferenceId: number | null; name: string; position: number };
+type OldDivision = {
+  id: number;
+  conferenceId: number | null;
+  name: string;
+  position: number;
+};
 
 // Copies the conferences and divisions to the new season in display order.
 // Returns the old divisions and the new id of each.
@@ -345,13 +422,14 @@ function insertTeams(
        head_coach_name, primary_color, secondary_color, offense_tag, ownership_style,
        ownership_loyalty, front_office_grade, head_coach_grade, hot_seat, franchise_points,
        offense_profile, offense_qualities, offense_special_result,
-       defense_profile, defense_qualities, defense_special_result)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       defense_profile, defense_qualities, defense_special_result,
+       kick_return, punt_return, fg_range, xp_range, pending_move)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   order.forEach(({ entry, index }, position) => {
     const hired = rules.coached[index];
     const drafted = rules.annual[index];
-    const camp = rules.camp[index];
+    const card = rules.teams[index];
     insertTeam.run(
       seasonId,
       entry.franchiseId,
@@ -363,18 +441,23 @@ function insertTeams(
       entry.primaryColor,
       entry.secondaryColor,
       entry.offenseTag,
-      hired.ownershipStyle,
-      hired.ownershipLoyalty,
-      camp.frontOfficeGrade,
-      hired.headCoachGrade,
-      hired.hotSeat ? 1 : 0,
-      camp.pointsLeft,
-      drafted.offenseProfile,
-      JSON.stringify(camp.offenseQualities),
+      card.ownershipStyle,
+      card.ownershipLoyalty,
+      card.frontOfficeGrade,
+      card.headCoachGrade,
+      card.hotSeat ? 1 : 0,
+      0, // the Franchise Points left after training camp are lost
+      card.offenseProfile,
+      JSON.stringify(card.offenseQualities),
       drafted.offenseSpecialResult,
-      drafted.defenseProfile,
-      JSON.stringify(camp.defenseQualities),
+      card.defenseProfile,
+      JSON.stringify(card.defenseQualities),
       drafted.defenseSpecialResult,
+      card.special.kickReturn,
+      card.special.puntReturn,
+      card.special.fgRange,
+      card.special.xpRange,
+      card.pendingMove ? 1 : 0,
     );
   });
 }
@@ -409,7 +492,13 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
   const expansionIds = expansion.map(() => Number(insertFranchise.run(leagueId).lastInsertRowid));
 
   const taken = [...kept, ...expansion].map((team) => team.headCoachName);
-  const rules = runRules(kept, coachInputs(kept, expansion, expansionIds), taken, rng);
+  const rules = runRules(
+    kept,
+    coachInputs(kept, expansion, expansionIds),
+    taken,
+    season.xpKickDistance as XpKickDistance,
+    rng,
+  );
 
   const entries: Entry[] = [
     ...kept.map((team) => ({
@@ -531,6 +620,11 @@ export type DraftTeam = {
   defenseProfile: DefenseProfile;
   defenseQualities: DefenseQuality[];
   defenseSpecialResult: string | null;
+  kickReturn: ReturnQuality | null;
+  puntReturn: ReturnQuality | null;
+  fgRange: string | null;
+  xpRange: string | null;
+  pendingMove: boolean;
 };
 
 export type OffseasonDraft = {
@@ -564,7 +658,9 @@ export function getOffseasonDraft(db: DatabaseSync, leagueId: number): Offseason
               offense_profile AS offenseProfile, offense_qualities AS offenseQualities,
               offense_special_result AS offenseSpecialResult,
               defense_profile AS defenseProfile, defense_qualities AS defenseQualities,
-              defense_special_result AS defenseSpecialResult
+              defense_special_result AS defenseSpecialResult,
+              kick_return AS kickReturn, punt_return AS puntReturn,
+              fg_range AS fgRange, xp_range AS xpRange, pending_move AS pendingMove
        FROM team_season
        LEFT JOIN division ON division.id = team_season.division_id
        WHERE team_season.season_id = ?
@@ -572,8 +668,14 @@ export function getOffseasonDraft(db: DatabaseSync, leagueId: number): Offseason
     )
     .all(draftId) as (Omit<
     DraftTeam,
-    "isNew" | "hotSeat" | "offenseQualities" | "defenseQualities"
-  > & { isNew: number; hotSeat: number; offenseQualities: string; defenseQualities: string })[];
+    "isNew" | "hotSeat" | "offenseQualities" | "defenseQualities" | "pendingMove"
+  > & {
+    isNew: number;
+    hotSeat: number;
+    offenseQualities: string;
+    defenseQualities: string;
+    pendingMove: number;
+  })[];
   const log = db
     .prepare(
       `SELECT step, franchise_id AS franchiseId, message
@@ -588,6 +690,7 @@ export function getOffseasonDraft(db: DatabaseSync, leagueId: number): Offseason
       ...team,
       isNew: team.isNew === 1,
       hotSeat: team.hotSeat === 1,
+      pendingMove: team.pendingMove === 1,
       offenseQualities: JSON.parse(team.offenseQualities) as Quality[],
       defenseQualities: JSON.parse(team.defenseQualities) as DefenseQuality[],
     })),
