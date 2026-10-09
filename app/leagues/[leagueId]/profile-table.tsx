@@ -1,7 +1,7 @@
 import type { LeagueDetail } from "@/lib/leagues";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
-import { listed } from "@/lib/cards";
+import { listedText } from "@/lib/cards";
 import type { Team } from "@/lib/teams";
 import { LeagueGroups } from "./league-groups";
 
@@ -24,10 +24,10 @@ function ProfileTable({ caption, teams, side }: { caption: string; teams: Team[]
       </thead>
       <tbody>
         {teams.map((team) => {
-          const lines =
+          const text =
             side === "offense"
-              ? listed(PROFILE_LABELS[team.offenseProfile ?? "AVERAGE"], team.offenseQualities)
-              : listed(
+              ? listedText(PROFILE_LABELS[team.offenseProfile ?? "AVERAGE"], team.offenseQualities)
+              : listedText(
                   DEFENSE_PROFILE_LABELS[team.defenseProfile ?? "AVERAGE"],
                   team.defenseQualities,
                 );
@@ -36,7 +36,7 @@ function ProfileTable({ caption, teams, side }: { caption: string; teams: Team[]
               <th scope="row" className="py-1 pr-2 text-left font-normal">
                 {team.city} {team.nickname}
               </th>
-              <td className="py-1 pr-2">{lines.length > 0 ? lines.join(", ") : "None"}</td>
+              <td className="py-1 pr-2">{text}</td>
             </tr>
           );
         })}

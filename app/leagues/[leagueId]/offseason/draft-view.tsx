@@ -1,8 +1,7 @@
 import type { OffseasonDraft } from "@/lib/offseason";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
-import type { Quality } from "@/lib/reference/profile-tables";
-import { listed } from "@/lib/cards";
+import { listedText } from "@/lib/cards";
 import { ANNUAL_STEPS, ANNUAL_STEP_HEADINGS } from "@/lib/rules/annual-draft";
 import { COACH_STEPS, COACH_STEP_HEADINGS } from "@/lib/rules/coaches";
 import { rerollOffseasonAction } from "../actions";
@@ -25,12 +24,6 @@ const COLUMNS = [
   "Front office",
   "FP",
 ];
-
-// The profile and qualities of one side as a single list, "None" when empty.
-function sideLines(profile: string, qualities: Quality[]): string {
-  const lines = listed(profile, qualities);
-  return lines.length > 0 ? lines.join(", ") : "None";
-}
 
 // The off-season draft: each team's coach, management and Franchise Points, and
 // the log of every roll.
@@ -108,13 +101,13 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
                   {team.city} {team.nickname}
                 </th>
                 <td className="py-1 pr-2">
-                  {sideLines(PROFILE_LABELS[team.offenseProfile], team.offenseQualities)}
+                  {listedText(PROFILE_LABELS[team.offenseProfile], team.offenseQualities)}
                   {team.offenseSpecialResult && (
                     <span className="block text-muted">{team.offenseSpecialResult}</span>
                   )}
                 </td>
                 <td className="py-1 pr-2">
-                  {sideLines(DEFENSE_PROFILE_LABELS[team.defenseProfile], team.defenseQualities)}
+                  {listedText(DEFENSE_PROFILE_LABELS[team.defenseProfile], team.defenseQualities)}
                   {team.defenseSpecialResult && (
                     <span className="block text-muted">{team.defenseSpecialResult}</span>
                   )}

@@ -181,6 +181,30 @@ describe("startOffseason", () => {
     });
   });
 
+  it("saves a Table G special result on the team and side that rolled it", () => {
+    const id = readyLeague();
+    expect(startOffseason(db, id, 1)).toEqual({ ok: true });
+    // A (*) or (**) result is rare, so re-roll until both sides have had one.
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 2000 && seen.size < 2; seed++) {
+      expect(rerollOffseason(db, id, seed)).toEqual({ ok: true });
+      const draft = getOffseasonDraft(db, id)!;
+      const lines = draft.log.filter((line) => line.message.includes("Table G"));
+      for (const line of lines) {
+        const team = draft.teams.find((entry) => entry.franchiseId === line.franchiseId)!;
+        const saved =
+          line.step === "offense-profile" ? team.offenseSpecialResult : team.defenseSpecialResult;
+        expect(line.message.endsWith(`${saved}.`)).toBe(true);
+        seen.add(line.step);
+      }
+      // No team shows a special result that no line rolled.
+      const saved = draft.teams.filter((team) => team.offenseSpecialResult !== null);
+      const savedDefense = draft.teams.filter((team) => team.defenseSpecialResult !== null);
+      expect(saved.length + savedDefense.length).toBe(lines.length);
+    }
+    expect([...seen].sort()).toEqual(["defense-profile", "offense-profile"]);
+  });
+
   it("treats an expansion team as average on both sides", () => {
     const id = readyLeague(TWO_DIVISIONS);
     addExpansionTeam(db, id, listTeams(db, id)[0].divisionId, seededRng(3));

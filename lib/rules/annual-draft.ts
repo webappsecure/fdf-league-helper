@@ -72,26 +72,24 @@ type AnnualSide = {
   profileTable: string;
 };
 
-// Steps B and C for one side of the ball, for every team in the league.
-function annualSide(
+// Step B: every team rolls in the column of its previous profile. A team that
+// rolls lower than it was pays 1 FP to roll again, and keeps the best roll.
+function rollNewProfiles(
   draft: Draft,
   config: AnnualSide,
   previous: Map<number, string>,
   specials: Map<number, string>,
 ): void {
   const { side, moves, rank } = config;
-  const step = side.profileStep;
   const label = (profile: string) => side.labels[profile];
-  const say = (card: Card | null, message: string) =>
-    draft.log.push({ step, franchiseId: card?.franchiseId ?? null, message });
+  const say = (card: Card, message: string) =>
+    draft.log.push({ step: side.profileStep, franchiseId: card.franchiseId, message });
 
-  // Step B: every team rolls in the column of its previous profile. A team that
-  // rolls lower than it was pays 1 FP to roll again, and keeps the best roll.
   for (const card of draft.cards) {
     const before = previous.get(card.franchiseId) as string;
     const column = moves[before];
     let best: ProfileMove<string> | null = null;
-    for (let attempt = 1; ; attempt++) {
+    for (;;) {
       const key = ascendingKey(rollD6(draft.rng), rollD6(draft.rng));
       const move = column[key];
       const lower = rank.indexOf(move.to) < rank.indexOf(before);
@@ -118,10 +116,14 @@ function annualSide(
       say(card, `${card.teamName}: Table G ${column.replace("_", " ")}, roll ${roll}: ${text}.`);
     }
   }
+}
 
-  // Step C: the teams that are now PROLIFIC, PROLIFIC•, DULL or DULL• (or the
-  // defense equivalents) roll on the profile table, one profile at a time.
-  // Average teams are the pool for footnote draws.
+// Step C: the teams that are now PROLIFIC, PROLIFIC•, DULL or DULL• (or the
+// defense equivalents) roll on the profile table, one profile at a time.
+// Average teams are the pool for footnote draws.
+function rollProfileQualities(draft: Draft, config: AnnualSide): void {
+  const { side } = config;
+  const label = (profile: string) => side.labels[profile];
   const deck = shuffle(
     draft.cards.filter((card) => side.of(card).profile === "AVERAGE"),
     draft.rng,
@@ -132,11 +134,13 @@ function annualSide(
       const row = side.table[profile][key];
       side.of(card).qualities.push(...row.qualities);
       const text = [label(profile), ...row.qualities.map(qualityLabel)].join(", ");
-      say(
-        card,
-        `${config.profileTable}, ${card.teamName} (${label(profile)}): roll ${key}, ${text}` +
+      draft.log.push({
+        step: side.profileStep,
+        franchiseId: card.franchiseId,
+        message:
+          `${config.profileTable}, ${card.teamName} (${label(profile)}): roll ${key}, ${text}` +
           `${row.footnote ? `, footnote ${row.footnote}` : ""}.`,
-      );
+      });
       if (row.footnote) {
         drawForFootnote(
           draft,
@@ -148,6 +152,17 @@ function annualSide(
       }
     }
   }
+}
+
+// Steps B and C for one side of the ball, for every team in the league.
+function annualSide(
+  draft: Draft,
+  config: AnnualSide,
+  previous: Map<number, string>,
+  specials: Map<number, string>,
+): void {
+  rollNewProfiles(draft, config, previous, specials);
+  rollProfileQualities(draft, config);
 }
 
 // Steps 7 and 8 for the whole league. `teams` carry the FP the coach steps left

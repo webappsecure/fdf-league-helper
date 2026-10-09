@@ -1,6 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "@/lib/db";
-import { seededRng } from "@/lib/dice";
+import { seededRng, type Rng } from "@/lib/dice";
 import {
   planLimitFailure,
   rollMoveCity,
@@ -128,12 +128,8 @@ type Entry = {
   offenseTag: string | null;
 };
 
-// Builds the next season as a draft from the accepted one and its plan, with
-// the run and its log. The caller owns the transaction and checks the season.
-function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed: number): void {
-  const rng = seededRng(seed);
-
-  const kept = db
+function loadKeptTeams(db: DatabaseSync, seasonId: number): TeamRow[] {
+  return db
     .prepare(
       `SELECT team_season.id AS id, franchise_id AS franchiseId, division_id AS divisionId,
               city, nickname, head_coach_name AS headCoachName,
@@ -149,25 +145,31 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
        WHERE season_id = ? AND pending_removal = 0
        ORDER BY position`,
     )
-    .all(season.id) as TeamRow[];
+    .all(seasonId) as TeamRow[];
+}
+
+// Refuses to start unless every team has results and the plan meets the limits.
+function requireStartable(db: DatabaseSync, seasonId: number): void {
   const results = db
     .prepare(
       `SELECT COUNT(*) AS missing FROM team_season
        WHERE season_id = ?
          AND NOT EXISTS (SELECT 1 FROM season_result WHERE team_season_id = team_season.id)`,
     )
-    .get(season.id) as { missing: number };
+    .get(seasonId) as { missing: number };
   if (results.missing > 0) throw new Refusal("results-missing");
 
-  const limit = planLimitFailure(db, season.id);
+  const limit = planLimitFailure(db, seasonId);
   if (limit === "too-many" || limit === "too-few" || limit === "division-empty") {
     throw new Refusal(limit);
   }
+}
 
-  // A pending move that was never planned gets its city now.
+// A pending move that was never planned gets its city now.
+function rollUnplannedMoves(db: DatabaseSync, kept: TeamRow[], seasonId: number, rng: Rng): void {
   for (const team of kept) {
     if (team.pendingMove === 1 && team.pendingMoveCity === null) {
-      rollMoveCity(db, team.id, season.id, rng);
+      rollMoveCity(db, team.id, seasonId, rng);
       team.pendingMoveCity = (
         db
           .prepare("SELECT pending_move_city AS city FROM team_season WHERE id = ?")
@@ -177,8 +179,10 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
       ).city;
     }
   }
+}
 
-  const expansion = db
+function loadExpansionTeams(db: DatabaseSync, seasonId: number): ExpansionRow[] {
+  return db
     .prepare(
       `SELECT division_id AS divisionId, city, nickname, head_coach_name AS headCoachName,
               primary_color AS primaryColor, secondary_color AS secondaryColor,
@@ -186,13 +190,16 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
               front_office_grade AS frontOfficeGrade, head_coach_grade AS headCoachGrade
        FROM expansion_team WHERE season_id = ? ORDER BY position`,
     )
-    .all(season.id) as ExpansionRow[];
+    .all(seasonId) as ExpansionRow[];
+}
 
-  // Expansion teams become franchises now, so the log can name them.
-  const insertFranchise = db.prepare("INSERT INTO franchise (league_id) VALUES (?)");
-  const expansionIds = expansion.map(() => Number(insertFranchise.run(leagueId).lastInsertRowid));
-
-  const inputs: CoachInput[] = [
+// What the coach steps need for every team: the kept teams, then expansion teams.
+function coachInputs(
+  kept: TeamRow[],
+  expansion: ExpansionRow[],
+  expansionIds: number[],
+): CoachInput[] {
+  return [
     ...kept.map((team): CoachInput => {
       if (team.frontOfficeGrade === null || team.headCoachGrade === null) {
         throw new Error("An accepted team has no grades.");
@@ -227,11 +234,12 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
       previous: null,
     })),
   ];
-  const taken = [...kept, ...expansion].map((team) => team.headCoachName);
-  const { teams: coached, log: coachLog } = runCoaches(inputs, taken, rng);
+}
 
-  // Steps 7 and 8 take the teams in the same order, with the FP the coach steps
-  // left them. An expansion team has no previous profile, so it is average.
+// Runs the off-season rules: the coach steps, then steps 7 and 8 with the FP the
+// coach steps left. An expansion team has no previous profile, so it is average.
+function runRules(kept: TeamRow[], inputs: CoachInput[], taken: string[], rng: Rng) {
+  const { teams: coached, log: coachLog } = runCoaches(inputs, taken, rng);
   const annualTeams: AnnualTeam[] = inputs.map((input, index) => {
     const old = kept[index];
     return {
@@ -245,6 +253,149 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
   });
   const { results: annual, log: annualLog } = runAnnualDraft(annualTeams, rng);
   const log: OffseasonLogEntry[] = [...coachLog, ...annualLog];
+  return { coached, annual, log };
+}
+
+type OldDivision = { id: number; conferenceId: number | null; name: string; position: number };
+
+// Copies the conferences and divisions to the new season in display order.
+// Returns the old divisions and the new id of each.
+function copyStructure(
+  db: DatabaseSync,
+  oldSeasonId: number,
+  seasonId: number,
+  entries: Entry[],
+): { divisions: OldDivision[]; divisionIds: Map<number, number> } {
+  const conferenceIds = new Map<number, number>();
+  const conferences = db
+    .prepare("SELECT id, name, position FROM conference WHERE season_id = ? ORDER BY position")
+    .all(oldSeasonId) as { id: number; name: string; position: number }[];
+  for (const conference of conferences) {
+    const id = Number(
+      db
+        .prepare("INSERT INTO conference (season_id, name, position) VALUES (?, ?, ?)")
+        .run(seasonId, conference.name, conference.position).lastInsertRowid,
+    );
+    conferenceIds.set(conference.id, id);
+  }
+  const divisions = db
+    .prepare(
+      `SELECT division.id AS id, division.conference_id AS conferenceId, division.name AS name,
+              division.position AS position
+       FROM division
+       LEFT JOIN conference ON conference.id = division.conference_id
+       WHERE division.season_id = ?
+       ORDER BY COALESCE(conference.position, 0), division.position`,
+    )
+    .all(oldSeasonId) as OldDivision[];
+  const divisionIds = new Map<number, number>();
+  for (const division of divisions) {
+    const count = entries.filter((entry) => entry.oldDivisionId === division.id).length;
+    const id = Number(
+      db
+        .prepare(
+          `INSERT INTO division (season_id, conference_id, name, position, team_count)
+           VALUES (?, ?, ?, ?, ?)`,
+        )
+        .run(
+          seasonId,
+          division.conferenceId === null
+            ? null
+            : (conferenceIds.get(division.conferenceId) ?? null),
+          division.name,
+          division.position,
+          count,
+        ).lastInsertRowid,
+    );
+    divisionIds.set(division.id, id);
+  }
+  return { divisions, divisionIds };
+}
+
+// Saves the teams in division order; within a division kept teams first, then new ones.
+function insertTeams(
+  db: DatabaseSync,
+  seasonId: number,
+  entries: Entry[],
+  divisions: OldDivision[],
+  divisionIds: Map<number, number>,
+  rules: ReturnType<typeof runRules>,
+): void {
+  const divisionOrder = (entry: Entry) =>
+    divisions.findIndex((division) => division.id === entry.oldDivisionId);
+  const order = entries
+    .map((entry, index) => ({ entry, index }))
+    .sort((a, b) => divisionOrder(a.entry) - divisionOrder(b.entry) || a.index - b.index);
+
+  const insertTeam = db.prepare(
+    `INSERT INTO team_season (season_id, franchise_id, division_id, position, city, nickname,
+       head_coach_name, primary_color, secondary_color, offense_tag, ownership_style,
+       ownership_loyalty, front_office_grade, head_coach_grade, hot_seat, franchise_points,
+       offense_profile, offense_qualities, offense_special_result,
+       defense_profile, defense_qualities, defense_special_result)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  order.forEach(({ entry, index }, position) => {
+    const hired = rules.coached[index];
+    const drafted = rules.annual[index];
+    insertTeam.run(
+      seasonId,
+      entry.franchiseId,
+      entry.oldDivisionId === null ? null : (divisionIds.get(entry.oldDivisionId) ?? null),
+      position,
+      entry.city,
+      entry.nickname,
+      hired.headCoachName,
+      entry.primaryColor,
+      entry.secondaryColor,
+      entry.offenseTag,
+      hired.ownershipStyle,
+      hired.ownershipLoyalty,
+      hired.frontOfficeGrade,
+      hired.headCoachGrade,
+      hired.hotSeat ? 1 : 0,
+      drafted.pointsLeft,
+      drafted.offenseProfile,
+      JSON.stringify(drafted.offenseQualities),
+      drafted.offenseSpecialResult,
+      drafted.defenseProfile,
+      JSON.stringify(drafted.defenseQualities),
+      drafted.defenseSpecialResult,
+    );
+  });
+}
+
+function insertRun(db: DatabaseSync, seasonId: number, seed: number, log: OffseasonLogEntry[]) {
+  const runId = Number(
+    db
+      .prepare("INSERT INTO run (season_id, kind, seed, created_at) VALUES (?, 'offseason', ?, ?)")
+      .run(seasonId, seed, new Date().toISOString()).lastInsertRowid,
+  );
+  const insertEntry = db.prepare(
+    `INSERT INTO run_log_entry (run_id, position, step, franchise_id, message)
+     VALUES (?, ?, ?, ?, ?)`,
+  );
+  log.forEach((line, position) => {
+    insertEntry.run(runId, position, line.step, line.franchiseId, line.message);
+  });
+}
+
+// Builds the next season as a draft from the accepted one and its plan, with
+// the run and its log. The caller owns the transaction and checks the season.
+function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed: number): void {
+  const rng = seededRng(seed);
+
+  const kept = loadKeptTeams(db, season.id);
+  requireStartable(db, season.id);
+  rollUnplannedMoves(db, kept, season.id, rng);
+  const expansion = loadExpansionTeams(db, season.id);
+
+  // Expansion teams become franchises now, so the log can name them.
+  const insertFranchise = db.prepare("INSERT INTO franchise (league_id) VALUES (?)");
+  const expansionIds = expansion.map(() => Number(insertFranchise.run(leagueId).lastInsertRowid));
+
+  const taken = [...kept, ...expansion].map((team) => team.headCoachName);
+  const rules = runRules(kept, coachInputs(kept, expansion, expansionIds), taken, rng);
 
   const entries: Entry[] = [
     ...kept.map((team) => ({
@@ -288,112 +439,9 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
       ).lastInsertRowid,
   );
 
-  // Copy the conferences and divisions in display order.
-  const conferenceIds = new Map<number, number>();
-  const conferences = db
-    .prepare("SELECT id, name, position FROM conference WHERE season_id = ? ORDER BY position")
-    .all(season.id) as { id: number; name: string; position: number }[];
-  for (const conference of conferences) {
-    const id = Number(
-      db
-        .prepare("INSERT INTO conference (season_id, name, position) VALUES (?, ?, ?)")
-        .run(seasonId, conference.name, conference.position).lastInsertRowid,
-    );
-    conferenceIds.set(conference.id, id);
-  }
-  const divisions = db
-    .prepare(
-      `SELECT division.id AS id, division.conference_id AS conferenceId, division.name AS name,
-              division.position AS position
-       FROM division
-       LEFT JOIN conference ON conference.id = division.conference_id
-       WHERE division.season_id = ?
-       ORDER BY COALESCE(conference.position, 0), division.position`,
-    )
-    .all(season.id) as {
-    id: number;
-    conferenceId: number | null;
-    name: string;
-    position: number;
-  }[];
-  const divisionIds = new Map<number, number>();
-  for (const division of divisions) {
-    const count = entries.filter((entry) => entry.oldDivisionId === division.id).length;
-    const id = Number(
-      db
-        .prepare(
-          `INSERT INTO division (season_id, conference_id, name, position, team_count)
-           VALUES (?, ?, ?, ?, ?)`,
-        )
-        .run(
-          seasonId,
-          division.conferenceId === null
-            ? null
-            : (conferenceIds.get(division.conferenceId) ?? null),
-          division.name,
-          division.position,
-          count,
-        ).lastInsertRowid,
-    );
-    divisionIds.set(division.id, id);
-  }
-
-  // Teams in division order; within a division kept teams first, then new ones.
-  const divisionOrder = (entry: Entry) =>
-    divisions.findIndex((division) => division.id === entry.oldDivisionId);
-  const order = entries
-    .map((entry, index) => ({ entry, index }))
-    .sort((a, b) => divisionOrder(a.entry) - divisionOrder(b.entry) || a.index - b.index);
-
-  const insertTeam = db.prepare(
-    `INSERT INTO team_season (season_id, franchise_id, division_id, position, city, nickname,
-       head_coach_name, primary_color, secondary_color, offense_tag, ownership_style,
-       ownership_loyalty, front_office_grade, head_coach_grade, hot_seat, franchise_points,
-       offense_profile, offense_qualities, offense_special_result,
-       defense_profile, defense_qualities, defense_special_result)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
-  order.forEach(({ entry, index }, position) => {
-    const hired = coached[index];
-    const drafted = annual[index];
-    insertTeam.run(
-      seasonId,
-      entry.franchiseId,
-      entry.oldDivisionId === null ? null : (divisionIds.get(entry.oldDivisionId) ?? null),
-      position,
-      entry.city,
-      entry.nickname,
-      hired.headCoachName,
-      entry.primaryColor,
-      entry.secondaryColor,
-      entry.offenseTag,
-      hired.ownershipStyle,
-      hired.ownershipLoyalty,
-      hired.frontOfficeGrade,
-      hired.headCoachGrade,
-      hired.hotSeat ? 1 : 0,
-      drafted.pointsLeft,
-      drafted.offenseProfile,
-      JSON.stringify(drafted.offenseQualities),
-      drafted.offenseSpecialResult,
-      drafted.defenseProfile,
-      JSON.stringify(drafted.defenseQualities),
-      drafted.defenseSpecialResult,
-    );
-  });
-
-  const runId = Number(
-    db
-      .prepare("INSERT INTO run (season_id, kind, seed, created_at) VALUES (?, 'offseason', ?, ?)")
-      .run(seasonId, seed, new Date().toISOString()).lastInsertRowid,
-  );
-  const insertEntry = db.prepare(
-    `INSERT INTO run_log_entry (run_id, position, step, franchise_id, message)
-     VALUES (?, ?, ?, ?, ?)`,
-  );
-  log.forEach((line, position) => {
-    insertEntry.run(runId, position, line.step, line.franchiseId, line.message);
-  });
+  const { divisions, divisionIds } = copyStructure(db, season.id, seasonId, entries);
+  insertTeams(db, seasonId, entries, divisions, divisionIds, rules);
+  insertRun(db, seasonId, seed, rules.log);
 }
 
 // Removes the draft season with its divisions, teams and run, and the franchises

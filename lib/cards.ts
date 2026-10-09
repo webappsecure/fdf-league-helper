@@ -48,6 +48,12 @@ export function listed(profileLabel: string, qualities: Quality[] | null): strin
   return profileLabel === "AVERAGE" ? lines : [profileLabel, ...lines];
 }
 
+// The same list as one line for a table cell, or "None" when there is nothing.
+export function listedText(profileLabel: string, qualities: Quality[] | null): string {
+  const lines = listed(profileLabel, qualities);
+  return lines.length > 0 ? lines.join(", ") : "None";
+}
+
 export function cardText(team: CardTeam, seasonLabel: string): CardText {
   return {
     city: team.city,
