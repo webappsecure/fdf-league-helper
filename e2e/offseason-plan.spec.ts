@@ -119,11 +119,8 @@ test("plans, re-rolls and cancels a pending move", async ({ page }) => {
 
   await page.reload();
   await expect(moving).toHaveText(first);
-  // A re-roll can land on the same city, so ask until it differs.
-  await expect(async () => {
-    await page.getByRole("button", { name: /^Re-roll new city for / }).click();
-    await expect(moving).not.toHaveText(first, { timeout: 1000 });
-  }).toPass();
+  await page.getByRole("button", { name: /^Re-roll new city for / }).click();
+  await expect(moving).not.toHaveText(first);
 
   await page.getByRole("button", { name: /^Cancel move for / }).click();
   await expect(page.getByText(/Moving to |Franchise move pending/)).toHaveCount(0);

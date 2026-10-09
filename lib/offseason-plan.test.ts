@@ -252,10 +252,15 @@ describe("moves", () => {
     ];
     expect(held).not.toContain(first);
 
-    planMove(db, teamId, seededRng(2));
-    const second = getOffseasonPlan(db, id).moves.find((m) => m.teamId === teamId)!.city!;
-    expect(second).not.toBe(first);
-    expect(held).not.toContain(second);
+    // Every re-roll changes the city and never takes one held elsewhere.
+    let previous = first;
+    for (let seed = 1; seed <= 20; seed++) {
+      planMove(db, teamId, seededRng(seed));
+      const next = getOffseasonPlan(db, id).moves.find((m) => m.teamId === teamId)!.city!;
+      expect(next, `seed ${seed}`).not.toBe(previous);
+      expect(held).not.toContain(next);
+      previous = next;
+    }
   });
 
   it("does not give two moving teams the same city", () => {

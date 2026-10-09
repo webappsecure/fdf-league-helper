@@ -100,21 +100,15 @@ function checkLimits(db: DatabaseSync, seasonId: number): void {
 }
 
 function heldIdentities(db: DatabaseSync, seasonId: number): Identity[] {
-  const teams = db
-    .prepare(
-      `SELECT city, nickname, head_coach_name AS headCoachName,
-              primary_color AS primaryColor, secondary_color AS secondaryColor
-       FROM team_season WHERE season_id = ?`,
-    )
-    .all(seasonId) as Identity[];
-  const planned = db
-    .prepare(
-      `SELECT city, nickname, head_coach_name AS headCoachName,
-              primary_color AS primaryColor, secondary_color AS secondaryColor
-       FROM expansion_team WHERE season_id = ?`,
-    )
-    .all(seasonId) as Identity[];
-  return [...teams, ...planned];
+  const select = (table: string) =>
+    db
+      .prepare(
+        `SELECT city, nickname, head_coach_name AS headCoachName,
+                primary_color AS primaryColor, secondary_color AS secondaryColor
+         FROM ${table} WHERE season_id = ?`,
+      )
+      .all(seasonId) as Identity[];
+  return [...select("team_season"), ...select("expansion_team")];
 }
 
 function rollTeam(held: Identity[], rng: Rng) {
@@ -233,7 +227,6 @@ type TeamRow = {
   status: string;
   pendingMove: number;
   pendingRemoval: number;
-  city: string;
 };
 
 function findTeam(db: DatabaseSync, teamId: number): TeamRow {
@@ -241,7 +234,7 @@ function findTeam(db: DatabaseSync, teamId: number): TeamRow {
     .prepare(
       `SELECT team_season.id AS id, season.id AS seasonId, season.status AS status,
               team_season.pending_move AS pendingMove,
-              team_season.pending_removal AS pendingRemoval, team_season.city AS city
+              team_season.pending_removal AS pendingRemoval
        FROM team_season JOIN season ON season.id = team_season.season_id
        WHERE team_season.id = ?`,
     )
@@ -273,12 +266,13 @@ export function planMove(db: DatabaseSync, teamId: number, rng: Rng): PlanResult
     if (team.pendingRemoval === 1) throw new Refusal("team-removed");
 
     const taken = heldIdentities(db, team.seasonId).map((held) => held.city);
+    // Every planned city, this team's own included, so a re-roll always changes it.
     const others = db
       .prepare(
         `SELECT pending_move_city AS city FROM team_season
-         WHERE season_id = ? AND id <> ? AND pending_move_city IS NOT NULL`,
+         WHERE season_id = ? AND pending_move_city IS NOT NULL`,
       )
-      .all(team.seasonId, teamId) as { city: string }[];
+      .all(team.seasonId) as { city: string }[];
     const city = pickCity([...taken, ...others.map((other) => other.city)], rng);
     db.prepare("UPDATE team_season SET pending_move_city = ? WHERE id = ?").run(city, teamId);
   });
