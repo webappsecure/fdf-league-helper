@@ -48,8 +48,14 @@ export function DeleteLeague({ leagueId, name }: { leagueId: number; name: strin
           </button>
           <button
             type="submit"
-            disabled={pending}
-            className="rounded bg-danger-solid px-4 py-2 font-medium text-on-primary hover:bg-danger-hover disabled:opacity-60"
+            // Disabling the pressed button would drop keyboard focus out of the
+            // dialog, so it stays focusable and a press while it runs does not
+            // submit the form again.
+            aria-disabled={pending}
+            onClick={(event) => {
+              if (pending) event.preventDefault();
+            }}
+            className="rounded bg-danger-solid px-4 py-2 font-medium text-on-primary hover:bg-danger-hover aria-disabled:opacity-60"
           >
             {pending ? "Deleting..." : "Delete permanently"}
           </button>

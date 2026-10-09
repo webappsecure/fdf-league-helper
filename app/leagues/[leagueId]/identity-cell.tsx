@@ -71,8 +71,8 @@ function RerollButton({
       aria-disabled={pending}
       // When focus is in this button's own cell, keep it there. Otherwise the
       // press would blur the cell's text input, start a save of its typed text
-      // and disable this button before the click lands. Focus in any other cell
-      // moves as usual, so that cell saves what was typed in it.
+      // and make this button ignore the click that follows. Focus in any other
+      // cell moves as usual, so that cell saves what was typed in it.
       onMouseDown={(event) => {
         if (event.currentTarget.parentElement?.contains(document.activeElement)) {
           event.preventDefault();

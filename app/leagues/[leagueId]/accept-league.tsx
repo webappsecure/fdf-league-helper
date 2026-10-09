@@ -14,6 +14,7 @@ export function AcceptLeague({ leagueId, name }: { leagueId: number; name: strin
   }
 
   function accept() {
+    if (pending) return;
     startTransition(async () => {
       const result = await acceptLeagueAction(leagueId);
       if (result.success) {
@@ -63,8 +64,10 @@ export function AcceptLeague({ leagueId, name }: { leagueId: number; name: strin
           <button
             type="button"
             onClick={accept}
-            disabled={pending}
-            className="rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
+            // Disabling the pressed button would drop keyboard focus out of the
+            // dialog, so it stays focusable and ignores presses while it runs.
+            aria-disabled={pending}
+            className="rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover aria-disabled:opacity-60"
           >
             {pending ? "Accepting..." : "Accept league"}
           </button>

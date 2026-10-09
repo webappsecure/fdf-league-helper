@@ -150,6 +150,46 @@ test("shows not found for unknown and malformed league ids", async ({ page }) =>
   }
 });
 
+test("keeps focus on the delete button while it runs and ignores a second press", async ({
+  page,
+}) => {
+  const name = uniqueName("Busy Delete League");
+  await createPlainLeague(page, name);
+
+  // Hold every request back until released, and count them.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requests = 0;
+  await page.route("**/leagues/*", async (route) => {
+    if (route.request().method() === "POST") {
+      requests += 1;
+      await held;
+    }
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Delete league" }).click();
+  const dialog = page.getByRole("dialog");
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Delete permanently" })).toBeFocused();
+  await page.keyboard.press("Enter");
+
+  // The label reads "Deleting..." while it runs.
+  const running = dialog.getByRole("button", { name: "Deleting..." });
+  await expect(running).toHaveAttribute("aria-disabled", "true");
+  await expect(running).toBeFocused();
+  // Playwright's own click waits for an aria-disabled button, so press it directly.
+  await running.evaluate((button: HTMLButtonElement) => button.click());
+  expect(requests).toBe(1);
+
+  release();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("link", { name })).toHaveCount(0);
+  expect(requests).toBe(1);
+});
+
 test("deletes a league only after confirmation", async ({ page }) => {
   const name = uniqueName("Doomed League");
   await createPlainLeague(page, name);
