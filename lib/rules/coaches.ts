@@ -86,20 +86,12 @@ function bonusPoints(percentages: (number | null)[]): number[] {
   });
 }
 
-// CE "Season Progression" off-season steps 2 to 6. Each step finishes for the
-// whole league before the next begins, in the order the teams are given.
-// `takenCoachNames` are the coaches' names a replacement must not repeat.
-export function runCoaches(
-  teams: CoachInput[],
-  takenCoachNames: string[],
-  rng: Rng,
-): { teams: CoachResult[]; log: CoachLogEntry[] } {
-  const log: CoachLogEntry[] = [];
-  const note = (step: CoachStep, team: CoachInput, message: string) =>
-    log.push({ step, franchiseId: team.franchiseId, message: `${team.teamName}: ${message}` });
+type Note = (step: CoachStep, team: CoachInput, message: string) => void;
+type CoachState = { grade: Grade; hotSeat: boolean };
 
-  // Step 2: grade change and hot seat removal.
-  const state = teams.map((team) => {
+// Step 2: grade change and hot seat removal.
+function gradeChanges(teams: CoachInput[], note: Note): CoachState[] {
+  return teams.map((team) => {
     let grade = team.headCoachGrade;
     let hotSeat = team.hotSeat;
     const record = team.previous;
@@ -131,8 +123,18 @@ export function runCoaches(
     );
     return { grade, hotSeat };
   });
+}
 
-  // Step 3: the coaching carousel, with Table A replacements.
+// Step 3: the coaching carousel, with Table A replacements. Returns the new
+// state and each team's head coach name.
+function carousel(
+  teams: CoachInput[],
+  before: CoachState[],
+  takenCoachNames: string[],
+  rng: Rng,
+  note: Note,
+): { state: CoachState[]; coachNames: string[] } {
+  const state = [...before];
   const names = [...takenCoachNames];
   const coachNames = teams.map((team) => team.coachName);
   teams.forEach((team, index) => {
@@ -164,9 +166,12 @@ export function runCoaches(
       );
     }
   });
+  return { state, coachNames };
+}
 
-  // Step 4: base FP from the grades after the carousel.
-  const points = teams.map((team, index) => {
+// Step 4: base FP from the grades after the carousel.
+function baseFranchisePoints(teams: CoachInput[], state: CoachState[], note: Note): number[] {
+  return teams.map((team, index) => {
     const base = basePoints(team.frontOfficeGrade, state[index].grade);
     note(
       "base-points",
@@ -175,23 +180,34 @@ export function runCoaches(
     );
     return base;
   });
+}
 
-  // Step 5: bonus FP for the worst records.
+// Step 5: bonus FP for the worst records.
+function withBonusPoints(teams: CoachInput[], points: number[], note: Note): number[] {
   const bonus = bonusPoints(
     teams.map((team) => (team.previous ? percentage(team.previous) : null)),
   );
-  teams.forEach((team, index) => {
-    if (!team.previous) return;
-    points[index] += bonus[index];
+  return teams.map((team, index) => {
+    if (!team.previous) return points[index];
     note(
       "bonus-points",
       team,
       bonus[index] > 0 ? `+${bonus[index]} FP for a bottom record.` : "No bonus.",
     );
+    return points[index] + bonus[index];
   });
+}
 
-  // Step 6: ownership impact. FP never go below 0.
-  const results = teams.map((team, index): CoachResult => {
+// Step 6: ownership impact. FP never go below 0.
+function ownershipImpact(
+  teams: CoachInput[],
+  state: CoachState[],
+  coachNames: string[],
+  points: number[],
+  rng: Rng,
+  note: Note,
+): CoachResult[] {
+  return teams.map((team, index): CoachResult => {
     const style = team.ownershipStyle;
     let loyalty = team.ownershipLoyalty;
     let frontOffice = team.frontOfficeGrade;
@@ -224,6 +240,23 @@ export function runCoaches(
       franchisePoints: fp,
     };
   });
+}
 
-  return { teams: results, log };
+// CE "Season Progression" off-season steps 2 to 6. Each step finishes for the
+// whole league before the next begins, in the order the teams are given.
+// `takenCoachNames` are the coaches' names a replacement must not repeat.
+export function runCoaches(
+  teams: CoachInput[],
+  takenCoachNames: string[],
+  rng: Rng,
+): { teams: CoachResult[]; log: CoachLogEntry[] } {
+  const log: CoachLogEntry[] = [];
+  const note: Note = (step, team, message) =>
+    log.push({ step, franchiseId: team.franchiseId, message: `${team.teamName}: ${message}` });
+
+  const graded = gradeChanges(teams, note);
+  const { state, coachNames } = carousel(teams, graded, takenCoachNames, rng, note);
+  const base = baseFranchisePoints(teams, state, note);
+  const points = withBonusPoints(teams, base, note);
+  return { teams: ownershipImpact(teams, state, coachNames, points, rng, note), log };
 }

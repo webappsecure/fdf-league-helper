@@ -7,7 +7,7 @@ import {
 import { basePoints, type Grade } from "@/lib/reference/management-tables";
 import { inPairOrder, type OffenseProfile, type Quality } from "@/lib/reference/offense-tables";
 import { draftRemainingDefenseQualities } from "@/lib/rules/defense";
-import { openDraft, type DraftStep, type DraftTeam } from "@/lib/rules/draft";
+import { openDraft, type Draft, type DraftStep, type DraftTeam } from "@/lib/rules/draft";
 import { draftEfficiency, draftRemainingQualities } from "@/lib/rules/offense";
 
 // CE "Season Progression" training camp steps 1 to 6, with the log steps they
@@ -80,21 +80,11 @@ export type CampResult = {
   pointsLeft: number;
 };
 
-// Steps 1 to 6 for the whole league. `points` is what the off-season left each
-// team; the base Franchise Points for its new front office grade are added.
-export function runTrainingCamp(
-  teams: CampTeam[],
-  rng: Rng,
-): { results: CampResult[]; log: CampLogEntry[] } {
-  const draft = openDraft(teams, rng);
-  const log: CampLogEntry[] = [];
-  const say = (step: CampStep, franchiseId: number | null, message: string) =>
-    log.push({ step, franchiseId, message });
+type Say = (step: CampStep, franchiseId: number | null, message: string) => void;
 
-  const grades = teams.map((team, index) => {
-    const card = draft.cards[index];
-    card.offense = { profile: team.offenseProfile, qualities: [...team.offenseQualities] };
-    card.defense = { profile: team.defenseProfile, qualities: [...team.defenseQualities] };
+// Step 1: each team's grade after the move of its profiles since last season.
+function adjustGrades(teams: CampTeam[], say: Say): Grade[] {
+  return teams.map((team) => {
     const { change, grade } = adjustFrontOffice(
       team.frontOfficeGrade,
       { offense: team.previousOffense, defense: team.previousDefense },
@@ -110,9 +100,10 @@ export function runTrainingCamp(
     );
     return grade;
   });
+}
 
-  say("camp-qv-cdv", null, `${teams.length} teams: QV ${draft.qv}, CDV ${draft.cdv}.`);
-
+// Step 3: the base FP for the new grades, on top of what the team has left.
+function addPoints(draft: Draft, grades: Grade[], say: Say): void {
   draft.cards.forEach((card, index) => {
     const added = basePoints(grades[index], card.headCoachGrade);
     card.points += added;
@@ -123,11 +114,35 @@ export function runTrainingCamp(
         `${added} FP added, ${card.points} FP.`,
     );
   });
+}
+
+// Steps 1 to 6 for the whole league. `points` is what the off-season left each
+// team; the base Franchise Points for its new front office grade are added.
+export function runTrainingCamp(
+  teams: CampTeam[],
+  rng: Rng,
+): { results: CampResult[]; log: CampLogEntry[] } {
+  const draft = openDraft(teams, rng);
+  const log: CampLogEntry[] = [];
+  const say: Say = (step, franchiseId, message) => log.push({ step, franchiseId, message });
+
+  teams.forEach((team, index) => {
+    draft.cards[index].offense = {
+      profile: team.offenseProfile,
+      qualities: [...team.offenseQualities],
+    };
+    draft.cards[index].defense = {
+      profile: team.defenseProfile,
+      qualities: [...team.defenseQualities],
+    };
+  });
+  const grades = adjustGrades(teams, say);
+  say("camp-qv-cdv", null, `${teams.length} teams: QV ${draft.qv}, CDV ${draft.cdv}.`);
+  addPoints(draft, grades, say);
 
   draftRemainingQualities(draft);
   draftEfficiency(draft, ["D", "F"]);
   draftRemainingDefenseQualities(draft);
-
   for (const entry of draft.log) {
     const step = CAMP_KEY[entry.step];
     if (step) say(step, entry.franchiseId, entry.message);
