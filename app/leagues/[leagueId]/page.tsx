@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { LEAGUE_NAME_MAX, SEASON_LABEL_MAX } from "@/lib/league-setup";
 import { getLeague } from "@/lib/leagues";
 import { getGenerationRun } from "@/lib/runs";
+import { resolveView, type LeagueView } from "@/lib/summary";
 import { listTeams } from "@/lib/teams";
 import { AcceptLeague } from "./accept-league";
 import { ActionButton } from "./action-button";
@@ -15,9 +16,39 @@ import { ManagementTables } from "./management-table";
 import { ProfileTables } from "./profile-table";
 import { RunLog } from "./run-log";
 import { SpecialTeamsTables } from "./special-teams-table";
+import { TeamSummaries } from "./team-summary";
 import { TeamTables } from "./team-table";
 
-async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }> }) {
+function ViewToggle({ view }: { view: LeagueView }) {
+  const links: { view: LeagueView; label: string }[] = [
+    { view: "summary", label: "Summary" },
+    { view: "detail", label: "Detailed" },
+  ];
+  return (
+    <nav aria-label="Teams view" className="mt-6 flex gap-4">
+      {links.map((link) => (
+        <Link
+          key={link.view}
+          href={`?view=${link.view}`}
+          aria-current={link.view === view ? "page" : undefined}
+          className={
+            link.view === view ? "font-semibold underline" : "text-link underline"
+          }
+        >
+          {link.label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
+async function LeagueDetails({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ leagueId: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { leagueId } = await params;
   if (!/^\d+$/.test(leagueId)) notFound();
   const league = getLeague(getDb(), Number(leagueId));
@@ -25,6 +56,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
 
   const teams = listTeams(getDb(), league.id);
   const run = getGenerationRun(getDb(), league.id);
+  const view = resolveView((await searchParams).view, league.status);
 
   return (
     <>
@@ -55,10 +87,19 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         <dd>{league.xpKickDistance}-yard line</dd>
       </dl>
 
-      <section className="mt-8">
-        <h2 className="text-lg font-semibold">Teams</h2>
-        <TeamTables league={league} teams={teams} />
-      </section>
+      {league.status !== "setup" && <ViewToggle view={view} />}
+
+      {view === "summary" ? (
+        <section className="mt-6">
+          <h2 className="text-lg font-semibold">Teams</h2>
+          <TeamSummaries league={league} teams={teams} />
+        </section>
+      ) : (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Teams</h2>
+          <TeamTables league={league} teams={teams} />
+        </section>
+      )}
 
       {league.status === "setup" && teams.length > 0 && (
         <section className="mt-8">
@@ -114,7 +155,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         </p>
       )}
 
-      {run && (
+      {run && view === "detail" && (
         <>
           <section className="mt-8">
             <h2 className="text-lg font-semibold">Management</h2>
@@ -154,7 +195,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
   );
 }
 
-export default function LeaguePage({ params }: PageProps<"/leagues/[leagueId]">) {
+export default function LeaguePage({ params, searchParams }: PageProps<"/leagues/[leagueId]">) {
   return (
     <>
       <p className="mb-2 text-sm">
@@ -163,7 +204,7 @@ export default function LeaguePage({ params }: PageProps<"/leagues/[leagueId]">)
         </Link>
       </p>
       <Suspense fallback={<p className="text-muted">Loading league...</p>}>
-        <LeagueDetails params={params} />
+        <LeagueDetails params={params} searchParams={searchParams} />
       </Suspense>
     </>
   );

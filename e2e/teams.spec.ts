@@ -610,6 +610,11 @@ test("renames the conference and division of an accepted league", async ({ page 
   await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
   await expect(page.getByRole("dialog")).toBeHidden();
+  // An accepted league opens on the summary; editing happens in the detailed view.
+  await page
+    .getByRole("navigation", { name: "Teams view" })
+    .getByRole("link", { name: "Detailed" })
+    .click();
 
   const conference = page.getByRole("textbox", { name: "National conference name", exact: true });
   await saved(page, async () => {

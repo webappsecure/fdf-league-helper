@@ -333,6 +333,11 @@ test("keeps an offense tag through a re-roll and an accept, and edits an accepte
   await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
   await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
   await expect(page.getByRole("dialog")).toBeHidden();
+  // An accepted league opens on the summary; editing happens in the detailed view.
+  await page
+    .getByRole("navigation", { name: "Teams view" })
+    .getByRole("link", { name: "Detailed" })
+    .click();
   await expect(tagSelect(page)).toHaveValue("P");
 
   const row = page.getByRole("table").getByRole("row").nth(1);

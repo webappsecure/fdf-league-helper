@@ -439,6 +439,12 @@ test("accepts a draft as the official season", async ({ page }) => {
 
   await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
   await expect(page.getByRole("main")).toContainText("Its results can no longer be re-rolled.");
+  // An accepted league opens on the summary; the detailed sections are one click away.
+  await page
+    .getByRole("navigation", { name: "Teams view" })
+    .getByRole("link", { name: "Detailed" })
+    .click();
+
   await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 2, name: "Generate league" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Re-roll league|Accept league|Generate league/ })).toHaveCount(0);
@@ -514,6 +520,11 @@ test("refuses to re-roll a league accepted in another tab", async ({ page, conte
   );
   await page.reload();
   await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await page
+    .getByRole("navigation", { name: "Teams view" })
+    .getByRole("link", { name: "Detailed" })
+    .click();
+  await expect(page.getByRole("heading", { level: 2, name: "Generation log" })).toBeVisible();
   expect(await logText(page)).toEqual(log);
 });
 
