@@ -251,9 +251,61 @@ test("says Not drafted for the parts a league generated before the drafts lacks"
 
   await page.goto(`${url}?view=summary`);
   const panel = panels(page).first();
-  for (const label of ["Offense", "Defense", "Kick return", "Punt return", "FG range", "XP range"]) {
+  for (const label of [
+    "Offense",
+    "Defense",
+    "Kick return",
+    "Punt return",
+    "FG range",
+    "XP range",
+  ]) {
     await expect(panel.locator(`dt:text-is("${label}") + dd`)).toHaveText("Not drafted");
   }
   // The management rolls are still there.
   await expect(panel.locator('dt:text-is("Base FP") + dd')).not.toHaveText("Not drafted");
 });
+
+for (const viewport of [
+  { name: "wide", width: 1440, height: 900 },
+  { name: "phone", width: 320, height: 700 },
+]) {
+  test(`keeps long qualities inside their panels at ${viewport.name} width`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    const url = await createDraft(page, "Long Qualities");
+    await accept(page);
+
+    // The longest quality names on both sides, so every panel has them.
+    const leagueId = Number(new URL(url).pathname.split("/").pop());
+    const db = new DatabaseSync(TEST_DB);
+    try {
+      db.exec("PRAGMA busy_timeout = 5000");
+      db.prepare(
+        `UPDATE team_season SET
+           offense_qualities = '[{"quality":"UNDISCIPLINED","strength":"SEMI"},{"quality":"INEFFICIENT","strength":"FULL"}]',
+           defense_qualities = '[{"quality":"UNDISCIPLINED","strength":"SEMI"},{"quality":"PUNISHING","strength":"FULL"}]'
+         WHERE season_id IN (SELECT id FROM season WHERE league_id = ?)`,
+      ).run(leagueId);
+    } finally {
+      db.close();
+    }
+
+    await page.goto(`${url}?view=summary`);
+    await expect(panels(page)).toHaveCount(8);
+    const overflow = await panels(page).evaluateAll((items) =>
+      items.flatMap((panel) => {
+        const box = panel.getBoundingClientRect();
+        const bad = [...panel.querySelectorAll("dd, dt")].filter(
+          (cell) => cell.getBoundingClientRect().right > box.right + 0.5,
+        );
+        const spills = panel.scrollWidth > panel.clientWidth ? ["panel"] : [];
+        return [...spills, ...bad.map((cell) => cell.textContent ?? "")];
+      }),
+    );
+    expect(overflow).toEqual([]);
+    // The page itself does not scroll sideways.
+    const page_ = await page.evaluate(
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth,
+    );
+    expect(page_).toBe(true);
+  });
+}

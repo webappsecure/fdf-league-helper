@@ -27,7 +27,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   return (
     <div className="flex gap-2">
       <dt className="w-28 shrink-0 text-muted">{label}</dt>
-      <dd>{children}</dd>
+      <dd className="min-w-0 wrap-anywhere">{children}</dd>
     </div>
   );
 }
@@ -96,7 +96,7 @@ export function TeamSummaries({ league, teams }: { league: LeagueDetail; teams: 
       {(caption, members) => (
         <ul
           aria-label={`${caption} team summaries`}
-          className="mt-2 grid gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          className="mt-2 grid gap-3 sm:grid-cols-2"
         >
           {members.map((team) => (
             <Panel key={team.id} summary={teamSummary(team)} Heading={Heading} />
