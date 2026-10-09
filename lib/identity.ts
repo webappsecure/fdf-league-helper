@@ -106,23 +106,28 @@ export function rollColors(taken: ColorPair[], rng: Rng): ColorPair {
 export function generateIdentities(count: number, rng: Rng): Identity[] {
   const identities: Identity[] = [];
   for (let index = 0; index < count; index++) {
-    identities.push({
-      city: pickCity(
-        identities.map((identity) => identity.city),
-        rng,
-      ),
-      nickname: rollNickname(
-        identities.map((identity) => identity.nickname),
-        rng,
-      ),
-      headCoachName: rollCoachName(
-        identities.map((identity) => identity.headCoachName),
-        rng,
-      ),
-      ...rollColors(identities, rng),
-    });
+    identities.push(rollIdentity(identities, rng));
   }
   return identities;
+}
+
+// One new team's identity, avoiding every value the given teams hold.
+export function rollIdentity(held: Identity[], rng: Rng): Identity {
+  return {
+    city: pickCity(
+      held.map((identity) => identity.city),
+      rng,
+    ),
+    nickname: rollNickname(
+      held.map((identity) => identity.nickname),
+      rng,
+    ),
+    headCoachName: rollCoachName(
+      held.map((identity) => identity.headCoachName),
+      rng,
+    ),
+    ...rollColors(held, rng),
+  };
 }
 
 // A new value for one field of one team. It avoids what the league's other

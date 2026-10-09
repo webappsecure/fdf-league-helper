@@ -10,6 +10,14 @@ vi.mock("@/lib/leagues", () => ({
   updateLeagueName: vi.fn(),
   updateSeasonLabel: vi.fn(),
 }));
+vi.mock("@/lib/offseason-plan", () => ({
+  addExpansionTeam: vi.fn(),
+  cancelMove: vi.fn(),
+  planMove: vi.fn(),
+  removeExpansionTeam: vi.fn(),
+  rerollExpansionTeam: vi.fn(),
+  setTeamRemoval: vi.fn(),
+}));
 vi.mock("@/lib/results", () => ({ saveSeasonResults: vi.fn() }));
 vi.mock("@/lib/runs", () => ({
   acceptLeague: vi.fn(),
@@ -31,11 +39,25 @@ import {
   updateLeagueName,
   updateSeasonLabel,
 } from "@/lib/leagues";
+import {
+  addExpansionTeam,
+  cancelMove,
+  planMove,
+  removeExpansionTeam,
+  rerollExpansionTeam,
+  setTeamRemoval,
+} from "@/lib/offseason-plan";
 import { saveSeasonResults } from "@/lib/results";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField, type Team } from "@/lib/teams";
 import {
   acceptLeagueAction,
+  addExpansionTeamAction,
+  cancelMoveAction,
+  planMoveAction,
+  removeExpansionTeamAction,
+  rerollExpansionTeamAction,
+  setTeamRemovalAction,
   deleteLeagueAction,
   fillTeamsAction,
   generateLeagueAction,
@@ -565,5 +587,106 @@ describe("saveSeasonResultsAction", () => {
   it("hides an unexpected error behind the generic message", async () => {
     vi.mocked(saveSeasonResults).mockImplementation(failing);
     expect(await saveSeasonResultsAction(3, payload)).toEqual(SAVE_FAILED);
+  });
+});
+
+describe("off-season plan actions", () => {
+  const cases = [
+    {
+      name: "addExpansionTeamAction",
+      mock: vi.mocked(addExpansionTeam),
+      run: (id: number) => addExpansionTeamAction(id, null),
+      missing: LEAGUE_NOT_FOUND,
+    },
+    {
+      name: "rerollExpansionTeamAction",
+      mock: vi.mocked(rerollExpansionTeam),
+      run: (id: number) => rerollExpansionTeamAction(id),
+      missing: TEAM_NOT_FOUND,
+    },
+    {
+      name: "removeExpansionTeamAction",
+      mock: vi.mocked(removeExpansionTeam),
+      run: (id: number) => removeExpansionTeamAction(id),
+      missing: TEAM_NOT_FOUND,
+    },
+    {
+      name: "setTeamRemovalAction",
+      mock: vi.mocked(setTeamRemoval),
+      run: (id: number) => setTeamRemovalAction(id, true),
+      missing: TEAM_NOT_FOUND,
+    },
+    {
+      name: "planMoveAction",
+      mock: vi.mocked(planMove),
+      run: (id: number) => planMoveAction(id),
+      missing: TEAM_NOT_FOUND,
+    },
+    {
+      name: "cancelMoveAction",
+      mock: vi.mocked(cancelMove),
+      run: (id: number) => cancelMoveAction(id),
+      missing: TEAM_NOT_FOUND,
+    },
+  ];
+
+  describe.each(cases)("$name", ({ mock, run, missing }) => {
+    it("succeeds and revalidates the plan page", async () => {
+      mock.mockReturnValue({ ok: true });
+      expect(await run(3)).toEqual({ success: true });
+      expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/offseason", "page");
+    });
+
+    it("rejects a bad id without touching the database", async () => {
+      for (const id of BAD_IDS) expect(await run(id)).toEqual(missing);
+      expect(mock).not.toHaveBeenCalled();
+    });
+
+    it("refuses a league that is not accepted", async () => {
+      mock.mockReturnValue({ ok: false, reason: "not-accepted" });
+      expect(await run(3)).toEqual({ success: false, error: "Accept this league first." });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it("hides an unexpected error behind the generic message", async () => {
+      mock.mockImplementation(failing);
+      expect(await run(3)).toEqual(SAVE_FAILED);
+    });
+  });
+
+  it.each([
+    ["too-many", "A league can have at most 56 teams."],
+    ["too-few", "A league needs at least 8 teams."],
+    ["division-required", "Choose a division for the new team."],
+    ["division-empty", "A division must keep at least one team."],
+    ["not-found", "That league could not be found."],
+  ] as const)("explains the %s refusal", async (reason, error) => {
+    vi.mocked(addExpansionTeam).mockReturnValue({ ok: false, reason });
+    expect(await addExpansionTeamAction(3, null)).toEqual({ success: false, error });
+  });
+
+  it("explains the move refusals and an unknown team", async () => {
+    vi.mocked(planMove).mockReturnValue({ ok: false, reason: "no-pending-move" });
+    expect(await planMoveAction(3)).toEqual({
+      success: false,
+      error: "This team has no pending move.",
+    });
+    vi.mocked(planMove).mockReturnValue({ ok: false, reason: "team-removed" });
+    expect(await planMoveAction(3)).toEqual({
+      success: false,
+      error: "Keep this team in the league before planning its move.",
+    });
+    vi.mocked(setTeamRemoval).mockReturnValue({ ok: false, reason: "team-not-found" });
+    expect(await setTeamRemovalAction(3, true)).toEqual(TEAM_NOT_FOUND);
+  });
+
+  it("rejects a bad division id and a non-boolean removal flag", async () => {
+    expect(await addExpansionTeamAction(3, 0)).toEqual({
+      success: false,
+      error: "Choose a division for the new team.",
+    });
+    expect(await setTeamRemovalAction(3, "yes" as unknown as boolean)).toEqual(TEAM_NOT_FOUND);
+    expect(addExpansionTeam).not.toHaveBeenCalled();
+    expect(setTeamRemoval).not.toHaveBeenCalled();
   });
 });

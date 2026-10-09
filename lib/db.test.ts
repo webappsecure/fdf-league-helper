@@ -35,6 +35,7 @@ describe("openDatabase", () => {
     expect(tableNames(file)).toEqual([
       "conference",
       "division",
+      "expansion_team",
       "franchise",
       "league",
       "run",
@@ -63,8 +64,8 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(7);
-    expect(tableNames(file)).toHaveLength(9);
+    expect(user_version).toBe(8);
+    expect(tableNames(file)).toHaveLength(10);
   });
 
   it("upgrades a database from before management rolls and keeps its teams", () => {
@@ -257,9 +258,13 @@ describe("openDatabase", () => {
   it("upgrades a league drafted before defense existed and keeps its offense", () => {
     const file = path.join(dir, "v4.sqlite");
     // A current database wound back to version 4: the columns migrations 5 and
-    // 6 add and the table migration 7 adds are dropped, leaving one team with its offense drafted.
+    // 6 add and the table migrations 7 and 8 add are dropped, leaving one team with its offense drafted.
     const old = openDatabase(file);
     old.exec(`
+      DROP TABLE expansion_team;
+      ALTER TABLE team_season DROP COLUMN pending_removal;
+      ALTER TABLE team_season DROP COLUMN pending_move;
+      ALTER TABLE team_season DROP COLUMN pending_move_city;
       DROP TABLE season_result;
       ALTER TABLE team_season DROP COLUMN offense_tag;
       ALTER TABLE team_season DROP COLUMN defense_profile;
@@ -322,7 +327,10 @@ describe("openDatabase", () => {
     generateLeague(first, leagueId, 7);
     // The schema as migration 5 left it.
     first.exec(
-      "DROP TABLE season_result; ALTER TABLE team_season DROP COLUMN offense_tag; PRAGMA user_version = 5;",
+      "DROP TABLE expansion_team; ALTER TABLE team_season DROP COLUMN pending_removal; " +
+        "ALTER TABLE team_season DROP COLUMN pending_move; " +
+        "ALTER TABLE team_season DROP COLUMN pending_move_city; " +
+        "DROP TABLE season_result; ALTER TABLE team_season DROP COLUMN offense_tag; PRAGMA user_version = 5;",
     );
     first.close();
 
@@ -331,7 +339,7 @@ describe("openDatabase", () => {
     const { user_version } = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(user_version).toBe(7);
+    expect(user_version).toBe(8);
     const teams = listTeams(db, leagueId);
     expect(teams).toHaveLength(8);
     expect(teams.every((team) => team.offenseTag === null)).toBe(true);

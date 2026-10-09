@@ -13,6 +13,16 @@ import {
   updateLeagueName,
   updateSeasonLabel,
 } from "@/lib/leagues";
+import {
+  addExpansionTeam,
+  cancelMove,
+  planMove,
+  removeExpansionTeam,
+  rerollExpansionTeam,
+  setTeamRemoval,
+  type PlanFailure,
+  type PlanResult,
+} from "@/lib/offseason-plan";
 import { saveSeasonResults, type ResultError } from "@/lib/results";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
@@ -37,6 +47,7 @@ function revalidateLeaguePages(): void {
   revalidatePath("/leagues/[leagueId]", "page");
   revalidatePath("/leagues/[leagueId]/cards", "page");
   revalidatePath("/leagues/[leagueId]/results", "page");
+  revalidatePath("/leagues/[leagueId]/offseason", "page");
 }
 
 export async function updateTeamFieldAction(
@@ -257,4 +268,70 @@ export async function saveSeasonResultsAction(
 
   revalidateLeaguePages();
   return { success: true };
+}
+
+const PLAN_MESSAGES: Record<PlanFailure, string> = {
+  "not-found": "That league could not be found.",
+  "not-accepted": "Accept this league first.",
+  "team-not-found": "That team could not be found.",
+  "too-many": "A league can have at most 56 teams.",
+  "too-few": "A league needs at least 8 teams.",
+  "division-required": "Choose a division for the new team.",
+  "division-empty": "A division must keep at least one team.",
+  "no-pending-move": "This team has no pending move.",
+  "team-removed": "Keep this team in the league before planning its move.",
+};
+
+// Runs one change to the pending off-season plan and reports why it was refused.
+function runPlanChange(change: () => PlanResult): CellResult {
+  let result;
+  try {
+    result = change();
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+  if (!result.ok) return { success: false, error: PLAN_MESSAGES[result.reason] };
+
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export async function addExpansionTeamAction(
+  leagueId: number,
+  divisionId: number | null,
+): Promise<CellResult> {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+  if (divisionId !== null && !isId(divisionId)) {
+    return { success: false, error: PLAN_MESSAGES["division-required"] };
+  }
+  return runPlanChange(() => addExpansionTeam(getDb(), leagueId, divisionId, Math.random));
+}
+
+export async function rerollExpansionTeamAction(expansionTeamId: number): Promise<CellResult> {
+  if (!isId(expansionTeamId)) return TEAM_NOT_FOUND;
+  return runPlanChange(() => rerollExpansionTeam(getDb(), expansionTeamId, Math.random));
+}
+
+export async function removeExpansionTeamAction(expansionTeamId: number): Promise<CellResult> {
+  if (!isId(expansionTeamId)) return TEAM_NOT_FOUND;
+  return runPlanChange(() => removeExpansionTeam(getDb(), expansionTeamId));
+}
+
+export async function setTeamRemovalAction(
+  teamId: number,
+  removed: boolean,
+): Promise<CellResult> {
+  if (!isId(teamId) || typeof removed !== "boolean") return TEAM_NOT_FOUND;
+  return runPlanChange(() => setTeamRemoval(getDb(), teamId, removed));
+}
+
+export async function planMoveAction(teamId: number): Promise<CellResult> {
+  if (!isId(teamId)) return TEAM_NOT_FOUND;
+  return runPlanChange(() => planMove(getDb(), teamId, Math.random));
+}
+
+export async function cancelMoveAction(teamId: number): Promise<CellResult> {
+  if (!isId(teamId)) return TEAM_NOT_FOUND;
+  return runPlanChange(() => cancelMove(getDb(), teamId));
 }

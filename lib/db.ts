@@ -126,6 +126,32 @@ const MIGRATIONS: string[] = [
     CHECK (is_champion = 0 OR made_playoffs = 1)
   );
   `,
+  `
+  -- A pending off-season plan, recorded against the accepted season. Features 12
+  -- to 16 apply it; nothing here changes the season that was played.
+  ALTER TABLE team_season ADD COLUMN pending_removal INTEGER NOT NULL DEFAULT 0
+    CHECK (pending_removal IN (0, 1));
+  ALTER TABLE team_season ADD COLUMN pending_move INTEGER NOT NULL DEFAULT 0
+    CHECK (pending_move IN (0, 1));
+  ALTER TABLE team_season ADD COLUMN pending_move_city TEXT;
+
+  CREATE TABLE expansion_team (
+    id INTEGER PRIMARY KEY,
+    season_id INTEGER NOT NULL REFERENCES season (id) ON DELETE CASCADE,
+    division_id INTEGER REFERENCES division (id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+    city TEXT NOT NULL,
+    nickname TEXT NOT NULL,
+    head_coach_name TEXT NOT NULL,
+    primary_color TEXT NOT NULL,
+    secondary_color TEXT NOT NULL,
+    ownership_style TEXT CHECK (ownership_style IN ('MEDDLING', 'SAVVY')),
+    ownership_loyalty TEXT CHECK (ownership_loyalty IN ('SELFISH', 'LOYAL')),
+    front_office_grade TEXT NOT NULL CHECK (front_office_grade IN ('A', 'B', 'C', 'D', 'F')),
+    head_coach_grade TEXT NOT NULL CHECK (head_coach_grade IN ('A', 'B', 'C', 'D', 'F')),
+    UNIQUE (season_id, position)
+  );
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

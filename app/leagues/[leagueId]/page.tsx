@@ -154,6 +154,14 @@ async function LeagueDetails({
               {hasResults ? "Edit end-of-season results" : "Enter end-of-season results"}
             </Link>
           </p>
+          <p className="mt-2">
+            <Link
+              href={`/leagues/${league.id}/offseason`}
+              className="font-medium text-link underline"
+            >
+              Plan expansion and contraction
+            </Link>
+          </p>
         </section>
       )}
 

@@ -7,6 +7,7 @@ import {
   rerollField,
   rollCoachName,
   rollColors,
+  rollIdentity,
   rollNickname,
   validateTeamField,
   type Identity,
@@ -150,6 +151,25 @@ describe("generateIdentities", () => {
     for (const team of generateIdentities(56, seeded(9))) {
       expect(cities.has(team.city), team.city).toBe(true);
       expect(colors.has(team.primaryColor) && colors.has(team.secondaryColor)).toBe(true);
+    }
+  });
+});
+
+describe("rollIdentity", () => {
+  it("avoids every value the held teams use", () => {
+    const held = generateIdentities(55, seeded(3));
+    for (let seed = 1; seed <= 5; seed++) {
+      const rolled = rollIdentity(held, seeded(seed));
+      expect(held.map((team) => team.city)).not.toContain(rolled.city);
+      expect(held.map((team) => team.nickname)).not.toContain(rolled.nickname);
+      expect(held.map((team) => team.headCoachName)).not.toContain(rolled.headCoachName);
+      expect(
+        held.some(
+          (team) =>
+            team.primaryColor === rolled.primaryColor &&
+            team.secondaryColor === rolled.secondaryColor,
+        ),
+      ).toBe(false);
     }
   });
 });
