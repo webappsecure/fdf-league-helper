@@ -14,6 +14,9 @@ function mixed(...values: number[]): Rng {
 }
 // A face (1-6) as the random value the dice read it from.
 const face = (n: number) => (n - 0.5) / 6;
+const roll = (a: number, b: number) => [face(a), face(b)];
+// The values a shuffle of `swaps + 1` cards takes while leaving the order alone.
+const keep = (swaps: number) => Array<number>(swaps).fill(KEEP_ORDER);
 
 function team(id: number, previous: CampSpecialInput["previous"], points = 0): CampSpecialInput {
   return { franchiseId: id, teamName: `T${id}`, points, previous };
@@ -61,26 +64,31 @@ describe("training camp step 7", () => {
   });
 
   it("makes every team roll when nobody holds the quality", () => {
+    // Each column shuffles two teams (one value). KR and PR: both teams roll.
+    // FG and XP: T1 keeps by the draw, T2 may improve and rolls 1-1, which is no better.
     const rng = mixed(
-      KEEP_ORDER,
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      KEEP_ORDER,
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      KEEP_ORDER,
-      face(1),
-      face(1),
-      KEEP_ORDER,
-      face(1),
-      face(1),
+      ...keep(1),
+      ...roll(6, 6),
+      ...roll(1, 1), // KR: T1 ELECTRIC, T2 none
+      ...keep(1),
+      ...roll(1, 1),
+      ...roll(6, 6), // PR: T1 none, T2 ELECTRIC
+      ...keep(1),
+      ...roll(1, 1), // FG
+      ...keep(1),
+      ...roll(1, 1), // XP
     );
-    const { results } = runCampSpecialTeams([team(1, none), team(2, none)], 2, rng);
-    expect(results).toHaveLength(2);
+    const { results, log } = runCampSpecialTeams([team(1, none), team(2, none)], 2, rng);
+
+    expect(results).toEqual([
+      { ...none, kickReturn: "ELECTRIC" },
+      { ...none, puntReturn: "ELECTRIC" },
+    ]);
+    const messages = log.map((entry) => entry.message);
+    expect(messages.filter((message) => message.includes("Kickoff return roll"))).toHaveLength(2);
+    expect(messages.filter((message) => message.includes("Punt return roll"))).toHaveLength(2);
+    expect(messages).toContain("T2: FG roll 1-1, 11-45. Keeps 11-53.");
+    expect(messages).toContain("T2: XP roll 1-1, 11-63. Keeps 11-63.");
   });
 
   it("rolls every column for an expansion team and keeps it out of the draws", () => {
@@ -146,35 +154,35 @@ describe("training camp step 7", () => {
   });
 
   it("rounds the draws up for an odd number of teams", () => {
-    // Three holders. FG: keep 2, the remaining 1 improves, none roll fresh.
+    // Three teams: FG and XP keep two by the draw and the last one may improve.
     const rng = mixed(
-      KEEP_ORDER,
-      KEEP_ORDER, // KR draw
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      face(1), // KR rolls (cdv for 3 teams)
-      KEEP_ORDER,
-      KEEP_ORDER, // PR draw
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      face(1),
-      KEEP_ORDER,
-      KEEP_ORDER,
-      face(1),
-      face(1), // FG: one improver
-      KEEP_ORDER,
-      KEEP_ORDER,
-      face(1),
-      face(1), // XP
+      ...keep(2),
+      ...roll(1, 1),
+      ...roll(1, 1),
+      ...roll(1, 1), // KR: all three roll
+      ...keep(2),
+      ...roll(1, 1),
+      ...roll(1, 1),
+      ...roll(1, 1), // PR
+      ...keep(2),
+      ...roll(6, 6), // FG: T3 rolls 11-65, better than 11-53
+      ...keep(2),
+      ...roll(1, 1), // XP: T3 rolls 11-56, worse than 11-63
     );
-    const { log } = runCampSpecialTeams([team(1, none), team(2, none), team(3, none)], 15, rng);
-    const fgStays = log.filter((entry) => entry.message.includes("FG stays"));
-    expect(fgStays).toHaveLength(2);
+    const { results, log } = runCampSpecialTeams(
+      [team(1, none), team(2, none), team(3, none)],
+      15,
+      rng,
+    );
+
+    expect(results.map((each) => each.fgRange)).toEqual(["11-53", "11-53", "11-65"]);
+    expect(results.map((each) => each.xpRange)).toEqual(["11-63", "11-63", "11-63"]);
+    const messages = log.map((entry) => entry.message);
+    expect(messages.filter((message) => message.includes("FG stays"))).toHaveLength(2);
+    expect(messages.filter((message) => message.includes("FG roll"))).toEqual([
+      "T3: FG roll 6-6, 11-65. Now 11-65.",
+    ]);
+    expect(messages.filter((message) => message.includes("XP stays"))).toHaveLength(2);
+    expect(messages).toContain("T3: XP roll 1-1, 11-56. Keeps 11-63.");
   });
 });

@@ -15,6 +15,7 @@ import type { XpKickDistance } from "@/lib/league-setup";
 import { runCampSpecialTeams } from "@/lib/rules/camp-special-teams";
 import { runEvents, runSaleOrMove, type EventTeam } from "@/lib/rules/camp-events";
 import { runAnnualDraft, type AnnualLogEntry, type AnnualTeam } from "@/lib/rules/annual-draft";
+import type { SpecialTeams } from "@/lib/rules/draft";
 import { runCoaches, type CoachInput, type CoachLogEntry } from "@/lib/rules/coaches";
 import { runTrainingCamp, type CampLogEntry, type CampTeam } from "@/lib/rules/training-camp";
 
@@ -248,6 +249,17 @@ function coachInputs(
   ];
 }
 
+// What a kept team had last season; an expansion team has nothing.
+function previousSpecialTeams(old: TeamRow | undefined): SpecialTeams | null {
+  if (!old || old.fgRange === null || old.xpRange === null) return null;
+  return {
+    kickReturn: old.kickReturn,
+    puntReturn: old.puntReturn,
+    fgRange: old.fgRange,
+    xpRange: old.xpRange,
+  };
+}
+
 // Training camp steps 7 to 9 on the teams as steps 1 to 6 left them. Returns
 // each team's final card values and the log.
 function runCampEnd(
@@ -260,23 +272,12 @@ function runCampEnd(
   rng: Rng,
 ): { teams: EventTeam[]; log: CampLogEntry[] } {
   const { results: special, log: specialLog } = runCampSpecialTeams(
-    annualTeams.map((team, index) => {
-      const old = kept[index];
-      const hasRanges = old?.fgRange != null && old?.xpRange != null;
-      return {
-        franchiseId: team.franchiseId,
-        teamName: team.teamName,
-        points: camp[index].pointsLeft,
-        previous: hasRanges
-          ? {
-              kickReturn: old.kickReturn,
-              puntReturn: old.puntReturn,
-              fgRange: old.fgRange!,
-              xpRange: old.xpRange!,
-            }
-          : null,
-      };
-    }),
+    annualTeams.map((team, index) => ({
+      franchiseId: team.franchiseId,
+      teamName: team.teamName,
+      points: camp[index].pointsLeft,
+      previous: previousSpecialTeams(kept[index]),
+    })),
     xpKickDistance,
     rng,
   );
