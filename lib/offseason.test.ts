@@ -303,6 +303,37 @@ describe("startOffseason", () => {
       expect(count("SELECT COUNT(*) AS total FROM season")).toBe(1);
     });
 
+    it("refuses a plan over 56 teams made through the database", () => {
+      const id = readyLeague(undefined, 56);
+      db.prepare(
+        `INSERT INTO expansion_team (season_id, position, city, nickname, head_coach_name,
+           primary_color, secondary_color, front_office_grade, head_coach_grade)
+         VALUES ((SELECT id FROM season WHERE league_id = ?), 0, 'Reno', 'Rams', 'Ann Lee',
+           '#000000', '#ffffff', 'B', 'C')`,
+      ).run(id);
+      expect(startOffseason(db, id, 1)).toEqual({ ok: false, reason: "too-many" });
+      expect(count("SELECT COUNT(*) AS total FROM season")).toBe(1);
+      expect(count("SELECT COUNT(*) AS total FROM franchise")).toBe(56);
+      expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(0);
+    });
+
+    it("refuses a plan that leaves a division empty, and writes nothing", () => {
+      const id = readyLeague(TWO_DIVISIONS);
+      const teams = listTeams(db, id);
+      const east = teams[0].divisionId;
+      const west = teams[teams.length - 1].divisionId;
+      // Four new West teams keep the league at 8 once East is emptied.
+      for (let seed = 1; seed <= 4; seed++) addExpansionTeam(db, id, west, seededRng(seed));
+      db.prepare("UPDATE team_season SET pending_removal = 1 WHERE division_id = ?").run(
+        east as number,
+      );
+
+      expect(startOffseason(db, id, 1)).toEqual({ ok: false, reason: "division-empty" });
+      expect(count("SELECT COUNT(*) AS total FROM season")).toBe(1);
+      expect(count("SELECT COUNT(*) AS total FROM franchise")).toBe(8);
+      expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(0);
+    });
+
     it("refuses a re-roll and a discard before the start", () => {
       const id = readyLeague();
       expect(rerollOffseason(db, id, 1)).toEqual({ ok: false, reason: "not-started" });
@@ -325,6 +356,23 @@ describe("re-roll and discard", () => {
     expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
     expect(getOffseasonDraft(db, id)!.seed).toBe(2);
     expect(getOffseasonDraft(db, id)!.teams.filter((team) => team.isNew)).toHaveLength(1);
+  });
+
+  it("a refused re-roll leaves the earlier draft, its run and its franchises as they were", () => {
+    const id = readyLeague();
+    addExpansionTeam(db, id, null, seededRng(3));
+    startOffseason(db, id, 1);
+    const before = getOffseasonDraft(db, id)!;
+
+    // Make the rebuild fail after the old draft has been deleted.
+    db.prepare("DELETE FROM season_result WHERE team_season_id = ?").run(listTeams(db, id)[0].id);
+    expect(rerollOffseason(db, id, 2)).toEqual({ ok: false, reason: "results-missing" });
+
+    expect(getOffseasonDraft(db, id)).toEqual(before);
+    expect(before.seed).toBe(1);
+    expect(count("SELECT COUNT(*) AS total FROM season")).toBe(2);
+    expect(count("SELECT COUNT(*) AS total FROM franchise")).toBe(9);
+    expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
   });
 
   it("discard removes the draft, its run and the expansion franchises, and unlocks the plan", () => {
