@@ -70,7 +70,16 @@ describe("teamSummary", () => {
     expect(summary.puntReturn).not.toBe("None");
     expect(summary.offense?.[0]).toBe("PROLIFIC");
     expect(summary.offense).toHaveLength(3);
-    expect(summary.defense).toHaveLength(2);
+    // AVERAGE is no profile, so only the quality is listed.
+    expect(summary.defense).toEqual(["ACTIVE•"]);
+  });
+
+  it("lists the profile first with the qualities, and None for an empty side", () => {
+    const summary = teamSummary(
+      team({ offenseProfile: "DULL_SEMI", defenseProfile: "AVERAGE", defenseQualities: [] }),
+    );
+    expect(summary.offense).toEqual(["DULL•", "SOLID", "RELIABLE•"]);
+    expect(summary.defense).toEqual(["None"]);
   });
 
   it("reads None for a team with no ownership quality", () => {

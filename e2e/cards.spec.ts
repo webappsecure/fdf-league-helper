@@ -47,12 +47,9 @@ function inputValues(page: Page, name: RegExp): Promise<string[]> {
     .evaluateAll((inputs) => inputs.map((input) => (input as HTMLInputElement).value));
 }
 
-// A league page list such as "PROLIFIC" and "SOLID, RELIABLE•" as card lines.
-function cardLines(profile: string, qualities: string): string[] {
-  return [
-    ...(profile === "AVERAGE" ? [] : [profile]),
-    ...(qualities === "None" ? [] : qualities.split(", ")),
-  ];
+// A league page list such as "PROLIFIC, SOLID, RELIABLE•" as card lines.
+function cardLines(list: string): string[] {
+  return list === "None" ? [] : list.split(", ");
 }
 
 function cards(page: Page): Locator {
@@ -97,10 +94,10 @@ test("shows a card for every team with that team's stored values", async ({ page
       "Season 1",
     ]);
     await expect(card.getByRole("region", { name: "Offense" }).getByRole("listitem")).toHaveText(
-      cardLines(offense[index][1], offense[index][2]),
+      cardLines(offense[index][1]),
     );
     await expect(card.getByRole("region", { name: "Defense" }).getByRole("listitem")).toHaveText(
-      cardLines(defense[index][1], defense[index][2]),
+      cardLines(defense[index][1]),
     );
     const [, kickReturn, puntReturn, fg, xp] = special[index];
     await expect(card.getByRole("term")).toHaveText([

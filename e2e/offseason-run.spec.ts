@@ -79,13 +79,7 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
     name: "Off-season draft offense and defense profiles",
   });
   await expect(profiles.getByRole("row")).toHaveCount(9);
-  await expect(profiles.getByRole("columnheader")).toHaveText([
-    "Team",
-    "Offense",
-    "Offense qualities",
-    "Defense",
-    "Defense qualities",
-  ]);
+  await expect(profiles.getByRole("columnheader")).toHaveText(["Team", "Offense", "Defense"]);
   const before = await table.innerText();
   const profilesBefore = await profiles.innerText();
 

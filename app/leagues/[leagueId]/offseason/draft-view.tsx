@@ -1,7 +1,8 @@
 import type { OffseasonDraft } from "@/lib/offseason";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
-import { qualityLabel } from "@/lib/reference/profile-tables";
+import type { Quality } from "@/lib/reference/profile-tables";
+import { listed } from "@/lib/cards";
 import { ANNUAL_STEPS, ANNUAL_STEP_HEADINGS } from "@/lib/rules/annual-draft";
 import { COACH_STEPS, COACH_STEP_HEADINGS } from "@/lib/rules/coaches";
 import { rerollOffseasonAction } from "../actions";
@@ -12,7 +13,7 @@ import { DiscardOffseason } from "./offseason-actions";
 const STEPS = [...COACH_STEPS, ...ANNUAL_STEPS];
 const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS };
 
-const PROFILE_COLUMNS = ["Team", "Offense", "Offense qualities", "Defense", "Defense qualities"];
+const PROFILE_COLUMNS = ["Team", "Offense", "Defense"];
 
 const COLUMNS = [
   "Team",
@@ -24,6 +25,12 @@ const COLUMNS = [
   "Front office",
   "FP",
 ];
+
+// The profile and qualities of one side as a single list, "None" when empty.
+function sideLines(profile: string, qualities: Quality[]): string {
+  const lines = listed(profile, qualities);
+  return lines.length > 0 ? lines.join(", ") : "None";
+}
 
 // The off-season draft: each team's coach, management and Franchise Points, and
 // the log of every roll.
@@ -100,20 +107,14 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
                 <th scope="row" className="py-1 pr-2 text-left font-normal">
                   {team.city} {team.nickname}
                 </th>
-                <td className="py-1 pr-2">{PROFILE_LABELS[team.offenseProfile]}</td>
                 <td className="py-1 pr-2">
-                  {team.offenseQualities.length > 0
-                    ? team.offenseQualities.map(qualityLabel).join(", ")
-                    : "None"}
+                  {sideLines(PROFILE_LABELS[team.offenseProfile], team.offenseQualities)}
                   {team.offenseSpecialResult && (
                     <span className="block text-muted">{team.offenseSpecialResult}</span>
                   )}
                 </td>
-                <td className="py-1 pr-2">{DEFENSE_PROFILE_LABELS[team.defenseProfile]}</td>
                 <td className="py-1 pr-2">
-                  {team.defenseQualities.length > 0
-                    ? team.defenseQualities.map(qualityLabel).join(", ")
-                    : "None"}
+                  {sideLines(DEFENSE_PROFILE_LABELS[team.defenseProfile], team.defenseQualities)}
                   {team.defenseSpecialResult && (
                     <span className="block text-muted">{team.defenseSpecialResult}</span>
                   )}

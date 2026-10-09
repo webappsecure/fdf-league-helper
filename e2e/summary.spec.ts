@@ -138,10 +138,7 @@ test("shows in each panel what the detailed sections show for the team", async (
     expect(text).toContain(
       `Front office ${frontOffice} Head coach grade ${headCoach} Base FP ${base}`,
     );
-    const lines = (cells: string[]) => {
-      const [profile, qualities] = cells.map((c) => c.trim());
-      return [profile, ...(qualities === "None" ? [] : qualities.split(", "))].join(" ");
-    };
+    const lines = (cells: string[]) => cells[0].trim().replaceAll(", ", " ");
     expect(text).toContain(`Offense ${lines(offense[index].cells)}`);
     expect(text).toContain(`Defense ${lines(defense[index].cells)}`);
     const [kr, pr, fg, xp] = special[index].cells.map((c) => c.trim());

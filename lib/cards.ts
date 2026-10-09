@@ -41,7 +41,9 @@ export type CardText = {
   xpRange: string;
 };
 
-function listed(profileLabel: string, qualities: Quality[] | null): string[] {
+// The profile (unless AVERAGE, which is no profile) then the qualities in card
+// order. The profile is a quality like any other, so every view lists it so.
+export function listed(profileLabel: string, qualities: Quality[] | null): string[] {
   const lines = (qualities ?? []).map(qualityLabel);
   return profileLabel === "AVERAGE" ? lines : [profileLabel, ...lines];
 }

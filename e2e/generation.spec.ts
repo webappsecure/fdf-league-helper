@@ -45,8 +45,26 @@ async function tableRows(page: Page, name: RegExp): Promise<string[][]> {
     );
 }
 
+// The profile is the first entry of a Qualities cell when the team has one, and
+// the rest are its qualities ("None" when there are none). A team with no
+// profile is called AVERAGE here, which the app itself never shows.
+const PROFILE_NAMES = ["PROLIFIC", "DULL", "STAUNCH", "INEPT"];
+function splitProfile([team, cell]: string[]): string[] {
+  const entries = cell === "None" ? [] : cell.split(", ");
+  const profile = entries.length > 0 && PROFILE_NAMES.includes(entries[0].replace("•", ""));
+  return [
+    team,
+    profile ? entries[0] : "AVERAGE",
+    entries.slice(profile ? 1 : 0).join(", ") || "None",
+  ];
+}
+
+async function sideRows(page: Page, name: RegExp): Promise<string[][]> {
+  return (await tableRows(page, name)).map(splitProfile);
+}
+
 function offenseRows(page: Page): Promise<string[][]> {
-  return tableRows(page, /offense$/);
+  return sideRows(page, /offense$/);
 }
 
 const DEFENSE_PAIRS = [
@@ -102,13 +120,13 @@ test("drafts a defense and special teams for every team", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 2, name: "Special teams" })).toBeVisible();
   await expect(
     page.getByRole("table", { name: /defense$/ }).getByRole("columnheader"),
-  ).toHaveText(["Team", "Profile", "Qualities"]);
+  ).toHaveText(["Team", "Qualities"]);
   await expect(
     page.getByRole("table", { name: /special teams$/ }).getByRole("columnheader"),
   ).toHaveText(["Team", "Kick return", "Punt return", "FG", "XP"]);
 
   const teams = (await managementRows(page)).map(([team]) => team);
-  const defense = await tableRows(page, /defense$/);
+  const defense = await sideRows(page, /defense$/);
   expect(defense.map(([team]) => team)).toEqual(teams);
 
   const profiles = defense.map(([, profile]) => profile);
@@ -143,7 +161,7 @@ test("drafts a defense and special teams for every team", async ({ page }) => {
   }
 
   await page.reload();
-  expect(await tableRows(page, /defense$/)).toEqual(defense);
+  expect(await sideRows(page, /defense$/)).toEqual(defense);
   expect(await tableRows(page, /special teams$/)).toEqual(special);
 });
 
@@ -154,7 +172,7 @@ test("drafts an offense for every team by the rulebook's counts", async ({ page 
   await expect(page.getByRole("heading", { level: 2, name: "Offense" })).toBeVisible();
   await expect(
     page.getByRole("table", { name: /offense$/ }).getByRole("columnheader"),
-  ).toHaveText(["Team", "Profile", "Qualities"]);
+  ).toHaveText(["Team", "Qualities"]);
 
   const rows = await offenseRows(page);
   const teams = (await managementRows(page)).map(([team]) => team);

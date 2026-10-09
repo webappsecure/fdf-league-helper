@@ -1,7 +1,8 @@
+import { listed } from "@/lib/cards";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { basePoints } from "@/lib/reference/management-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
-import { qualityLabel, type Quality } from "@/lib/reference/profile-tables";
+import type { Quality } from "@/lib/reference/profile-tables";
 import { resultLabel } from "@/lib/reference/special-teams-tables";
 import type { SeasonStatus } from "@/lib/leagues";
 import type { Team } from "@/lib/teams";
@@ -43,7 +44,8 @@ export type TeamSummary = {
 
 function describe(profile: string | null, qualities: Quality[] | null): string[] | null {
   if (profile === null) return null;
-  return [profile, ...(qualities ?? []).map(qualityLabel)];
+  const lines = listed(profile, qualities);
+  return lines.length > 0 ? lines : ["None"];
 }
 
 export function teamSummary(team: Team): TeamSummary {

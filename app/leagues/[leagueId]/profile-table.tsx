@@ -1,11 +1,11 @@
 import type { LeagueDetail } from "@/lib/leagues";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
-import { qualityLabel } from "@/lib/reference/profile-tables";
+import { listed } from "@/lib/cards";
 import type { Team } from "@/lib/teams";
 import { LeagueGroups } from "./league-groups";
 
-const COLUMNS = ["Team", "Profile", "Qualities"];
+const COLUMNS = ["Team", "Qualities"];
 
 type Side = "offense" | "defense";
 
@@ -24,21 +24,19 @@ function ProfileTable({ caption, teams, side }: { caption: string; teams: Team[]
       </thead>
       <tbody>
         {teams.map((team) => {
-          const profile =
+          const lines =
             side === "offense"
-              ? team.offenseProfile && PROFILE_LABELS[team.offenseProfile]
-              : team.defenseProfile && DEFENSE_PROFILE_LABELS[team.defenseProfile];
-          const qualities =
-            (side === "offense" ? team.offenseQualities : team.defenseQualities) ?? [];
+              ? listed(PROFILE_LABELS[team.offenseProfile ?? "AVERAGE"], team.offenseQualities)
+              : listed(
+                  DEFENSE_PROFILE_LABELS[team.defenseProfile ?? "AVERAGE"],
+                  team.defenseQualities,
+                );
           return (
             <tr key={team.id} className="border-b border-border">
               <th scope="row" className="py-1 pr-2 text-left font-normal">
                 {team.city} {team.nickname}
               </th>
-              <td className="py-1 pr-2">{profile}</td>
-              <td className="py-1 pr-2">
-                {qualities.length > 0 ? qualities.map(qualityLabel).join(", ") : "None"}
-              </td>
+              <td className="py-1 pr-2">{lines.length > 0 ? lines.join(", ") : "None"}</td>
             </tr>
           );
         })}
