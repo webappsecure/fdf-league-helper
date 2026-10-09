@@ -45,6 +45,14 @@ describe("openDatabase", () => {
     ]);
   });
 
+  it("waits for another connection's lock instead of failing at once", () => {
+    const db = openDatabase(path.join(dir, "fdf.sqlite"));
+    const row = db.prepare("PRAGMA busy_timeout").get() as { timeout: number };
+    db.close();
+
+    expect(row.timeout).toBe(5000);
+  });
+
   it("records the migration version and is safe to open twice", () => {
     const file = path.join(dir, "fdf.sqlite");
     openDatabase(file).close();

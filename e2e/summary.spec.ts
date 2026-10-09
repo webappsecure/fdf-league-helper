@@ -1,5 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
 import { expect, test, type Page } from "@playwright/test";
+import { TEST_DB } from "./test-db";
 
 // Specs share one database and run in parallel, so every league name is unique.
 function uniqueName(label: string): string {
@@ -232,10 +233,10 @@ test("says Not drafted for the parts a league generated before the drafts lacks"
   const url = await createDraft(page, "Undrafted Panels");
   await accept(page);
 
-  // The browser run's own database, as playwright.config.ts names it. Clearing
-  // these columns gives the state of a league generated before those drafts.
+  // Clearing these columns gives the state of a league generated before those
+  // drafts.
   const leagueId = Number(new URL(url).pathname.split("/").pop());
-  const db = new DatabaseSync("data/browser-tests.sqlite");
+  const db = new DatabaseSync(TEST_DB);
   try {
     db.exec("PRAGMA busy_timeout = 5000");
     db.prepare(

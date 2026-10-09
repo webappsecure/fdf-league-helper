@@ -152,11 +152,14 @@ function migrate(db: DatabaseSync): void {
   }
 }
 
+// How long a statement waits for another connection's lock before failing.
+const BUSY_TIMEOUT_MS = 5000;
+
 export function openDatabase(file: string): DatabaseSync {
   if (file !== ":memory:") {
     mkdirSync(path.dirname(file), { recursive: true });
   }
-  const db = new DatabaseSync(file);
+  const db = new DatabaseSync(file, { timeout: BUSY_TIMEOUT_MS });
   db.exec("PRAGMA foreign_keys = ON");
   migrate(db);
   return db;

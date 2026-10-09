@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
+import { TEST_DB } from "./e2e/test-db";
 
 const PORT = 3100;
-const TEST_DB = "data/browser-tests.sqlite";
 
 export default defineConfig({
   testDir: "./e2e",
