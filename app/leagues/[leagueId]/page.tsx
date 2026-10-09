@@ -88,6 +88,14 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         </section>
       )}
 
+      {league.status !== "setup" && (
+        <p className="mt-6">
+          <Link href={`/leagues/${league.id}/cards`} className="font-medium text-link underline">
+            View team cards
+          </Link>
+        </p>
+      )}
+
       {run && (
         <>
           <section className="mt-8">

@@ -24,6 +24,9 @@
   --danger-surface: light-dark(#fef2f2, #460809);
   --danger-text: light-dark(#82181a, #ffc9c9);
   --backdrop: light-dark(rgb(0 0 0 / 0.4), rgb(0 0 0 / 0.6));
+  /* A team card is printed paper: the same in light and dark mode. */
+  --card-paper: #ffffff;
+  --card-ink: #171717;
 }
 
 :root[data-theme="light"] {
@@ -51,6 +54,8 @@
   --color-danger-surface: var(--danger-surface);
   --color-danger-text: var(--danger-text);
   --color-backdrop: var(--backdrop);
+  --color-card-paper: var(--card-paper);
+  --color-card-ink: var(--card-ink);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
