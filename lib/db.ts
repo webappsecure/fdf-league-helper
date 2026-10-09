@@ -160,6 +160,12 @@ const MIGRATIONS: string[] = [
   ALTER TABLE team_season ADD COLUMN franchise_points INTEGER
     CHECK (franchise_points IS NULL OR franchise_points >= 0);
   `,
+  `
+  -- The Table G text a Table J or L result adds to the card. Only the season it
+  -- was rolled for carries it, so a new season's row starts empty.
+  ALTER TABLE team_season ADD COLUMN offense_special_result TEXT;
+  ALTER TABLE team_season ADD COLUMN defense_special_result TEXT;
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

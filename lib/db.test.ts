@@ -64,7 +64,7 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(9);
+    expect(user_version).toBe(10);
     expect(tableNames(file)).toHaveLength(10);
   });
 
@@ -261,6 +261,8 @@ describe("openDatabase", () => {
     // 6 add and the table migrations 7 and 8 add are dropped, leaving one team with its offense drafted.
     const old = openDatabase(file);
     old.exec(`
+      ALTER TABLE team_season DROP COLUMN offense_special_result;
+      ALTER TABLE team_season DROP COLUMN defense_special_result;
       ALTER TABLE team_season DROP COLUMN hot_seat;
       ALTER TABLE team_season DROP COLUMN franchise_points;
       DROP TABLE expansion_team;
@@ -329,7 +331,9 @@ describe("openDatabase", () => {
     generateLeague(first, leagueId, 7);
     // The schema as migration 5 left it.
     first.exec(
-      "ALTER TABLE team_season DROP COLUMN hot_seat; " +
+      "ALTER TABLE team_season DROP COLUMN offense_special_result; " +
+        "ALTER TABLE team_season DROP COLUMN defense_special_result; " +
+        "ALTER TABLE team_season DROP COLUMN hot_seat; " +
         "ALTER TABLE team_season DROP COLUMN franchise_points; " +
         "DROP TABLE expansion_team; ALTER TABLE team_season DROP COLUMN pending_removal; " +
         "ALTER TABLE team_season DROP COLUMN pending_move; " +
@@ -343,7 +347,7 @@ describe("openDatabase", () => {
     const { user_version } = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(user_version).toBe(9);
+    expect(user_version).toBe(10);
     const teams = listTeams(db, leagueId);
     expect(teams).toHaveLength(8);
     expect(teams.every((team) => team.offenseTag === null)).toBe(true);

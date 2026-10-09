@@ -73,16 +73,33 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
   const table = page.getByRole("table", { name: "Off-season draft teams" });
   await expect(table.getByRole("row")).toHaveCount(9);
   await expect(page.getByText("Step 6: Ownership impact")).toBeVisible();
+  await expect(page.getByText("Step 7: Annual draft and free agency, offense")).toBeVisible();
+  await expect(page.getByText("Step 8: Annual draft and free agency, defense")).toBeVisible();
+  const profiles = page.getByRole("table", {
+    name: "Off-season draft offense and defense profiles",
+  });
+  await expect(profiles.getByRole("row")).toHaveCount(9);
+  await expect(profiles.getByRole("columnheader")).toHaveText([
+    "Team",
+    "Offense",
+    "Offense qualities",
+    "Defense",
+    "Defense qualities",
+  ]);
   const before = await table.innerText();
+  const profilesBefore = await profiles.innerText();
 
   // The draft survives a reload.
   await page.reload();
   await expect(table.getByRole("row")).toHaveCount(9);
   expect(await table.innerText()).toBe(before);
+  expect(await profiles.innerText()).toBe(profilesBefore);
 
   // Re-roll keeps one draft of eight teams.
   await page.getByRole("button", { name: "Re-roll off-season" }).click();
   await expect(table.getByRole("row")).toHaveCount(9);
+  await expect(profiles.getByRole("row")).toHaveCount(9);
+  await expect(page.getByText("Step 7: Annual draft and free agency, offense")).toBeVisible();
 
   // The season stays as it was and the draft does not appear on the league page.
   await page.goto(url);

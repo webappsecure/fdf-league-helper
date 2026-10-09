@@ -120,7 +120,7 @@ describe("startOffseason", () => {
     expect(draft.log.length).toBeGreaterThan(0);
   });
 
-  it("copies the divisions and leaves profiles empty", () => {
+  it("copies the divisions and leaves the special teams empty", () => {
     const id = readyLeague(TWO_DIVISIONS);
     startOffseason(db, id, 5);
     const rows = db
@@ -136,10 +136,61 @@ describe("startOffseason", () => {
     ]);
     const filled = count(
       `SELECT COUNT(*) AS total FROM team_season JOIN season ON season.id = season_id
-       WHERE season.sequence = 2 AND (offense_profile IS NOT NULL OR defense_profile IS NOT NULL
-         OR offense_qualities IS NOT NULL OR kick_return IS NOT NULL OR fg_range IS NOT NULL)`,
+       WHERE season.sequence = 2 AND (kick_return IS NOT NULL OR punt_return IS NOT NULL
+         OR fg_range IS NOT NULL OR xp_range IS NOT NULL)`,
     );
     expect(filled).toBe(0);
+  });
+
+  it("saves each team's new profiles, qualities and special results after the coach steps", () => {
+    const id = readyLeague(TWO_DIVISIONS);
+    expect(startOffseason(db, id, 5)).toEqual({ ok: true });
+
+    const draft = getOffseasonDraft(db, id)!;
+    const profiles = ["PROLIFIC", "PROLIFIC_SEMI", "AVERAGE", "DULL_SEMI", "DULL"];
+    expect(draft.teams.every((team) => profiles.includes(team.offenseProfile))).toBe(true);
+    expect(
+      draft.teams.every((team) =>
+        ["STAUNCH", "STAUNCH_SEMI", "AVERAGE", "INEPT_SEMI", "INEPT"].includes(team.defenseProfile),
+      ),
+    ).toBe(true);
+    for (const team of draft.teams) {
+      expect(Array.isArray(team.offenseQualities)).toBe(true);
+      expect(Array.isArray(team.defenseQualities)).toBe(true);
+      expect(team.franchisePoints).toBeGreaterThanOrEqual(0);
+    }
+
+    // One run, with the coach steps followed by steps 7 and 8, and each team's
+    // previous profile named in its first Table J line.
+    expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
+    const steps = [...new Set(draft.log.map((line) => line.step))];
+    expect(steps.slice(-2)).toEqual(["offense-profile", "defense-profile"]);
+    expect(steps.indexOf("ownership-impact")).toBeLessThan(steps.indexOf("offense-profile"));
+    const labels: Record<string, string> = {
+      PROLIFIC: "PROLIFIC",
+      PROLIFIC_SEMI: "PROLIFIC•",
+      AVERAGE: "AVERAGE",
+      DULL_SEMI: "DULL•",
+      DULL: "DULL",
+    };
+    const accepted = listTeams(db, id);
+    accepted.forEach((team) => {
+      const name = `${team.city} ${team.nickname}`;
+      const first = draft.log.find((line) => line.message.startsWith(`Table J, ${name} `))!;
+      expect(first.message).toContain(`(was ${labels[team.offenseProfile!]})`);
+    });
+  });
+
+  it("treats an expansion team as average on both sides", () => {
+    const id = readyLeague(TWO_DIVISIONS);
+    addExpansionTeam(db, id, listTeams(db, id)[0].divisionId, seededRng(3));
+    expect(startOffseason(db, id, 5)).toEqual({ ok: true });
+    const draft = getOffseasonDraft(db, id)!;
+    const added = draft.teams.find((team) => team.isNew)!;
+    const name = `${added.city} ${added.nickname}`;
+    const lines = draft.log.filter((line) => line.message.includes(`${name} (was AVERAGE)`));
+    expect(lines.map((line) => line.step)).toContain("offense-profile");
+    expect(lines.map((line) => line.step)).toContain("defense-profile");
   });
 
   it("does not change the accepted season or show the draft elsewhere", () => {

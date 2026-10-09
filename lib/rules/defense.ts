@@ -23,7 +23,7 @@ export type DefenseResult = {
   defenseQualities: DefenseQuality[];
 };
 
-const DEFENSE: Side<DefenseDraftProfile, DefenseQualityName> = {
+export const DEFENSE: Side<DefenseDraftProfile, DefenseQualityName> = {
   of: (card) => card.defense,
   profileStep: "defense-profile",
   qualitiesStep: "defense-qualities",

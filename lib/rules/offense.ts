@@ -29,7 +29,7 @@ export type OffenseResult = {
   pointsLeft: number;
 };
 
-const OFFENSE: Side<DraftProfile, OffenseQuality> = {
+export const OFFENSE: Side<DraftProfile, OffenseQuality> = {
   of: (card) => card.offense,
   profileStep: "offense-profile",
   qualitiesStep: "offense-qualities",

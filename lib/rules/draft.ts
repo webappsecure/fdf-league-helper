@@ -121,7 +121,7 @@ type Avoidance = { cost: number; what: string; then: string };
 // Draws from the top of the deck until a team takes the result. A team that
 // can afford the avoidance pays it and the next card is drawn in its place.
 // Returns the taker, or null when the deck runs out, and everyone who avoided.
-function draw(
+export function draw(
   draft: Draft,
   step: DraftStep,
   deck: Card[],
@@ -148,7 +148,7 @@ function draw(
 // A profile table footnote: one more team from the pool receives its
 // qualities. Footnotes d, e and f are negative and cost 1 FP per quality to
 // avoid.
-function drawForFootnote<Profile extends string, Name extends string>(
+export function drawForFootnote<Profile extends string, Name extends string>(
   draft: Draft,
   side: Side<Profile, Name>,
   deck: Card[],

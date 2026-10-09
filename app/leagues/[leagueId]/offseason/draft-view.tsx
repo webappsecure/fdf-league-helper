@@ -1,9 +1,18 @@
 import type { OffseasonDraft } from "@/lib/offseason";
+import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
+import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
+import { qualityLabel } from "@/lib/reference/profile-tables";
+import { ANNUAL_STEPS, ANNUAL_STEP_HEADINGS } from "@/lib/rules/annual-draft";
 import { COACH_STEPS, COACH_STEP_HEADINGS } from "@/lib/rules/coaches";
 import { rerollOffseasonAction } from "../actions";
 import { ActionButton } from "../action-button";
 import { RunLog } from "../run-log";
 import { DiscardOffseason } from "./offseason-actions";
+
+const STEPS = [...COACH_STEPS, ...ANNUAL_STEPS];
+const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS };
+
+const PROFILE_COLUMNS = ["Team", "Offense", "Offense qualities", "Defense", "Defense qualities"];
 
 const COLUMNS = [
   "Team",
@@ -25,7 +34,8 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
         Off-season draft for {draft.seasonLabel}
       </h2>
       <p className="mt-1 text-muted">
-        The coaches and Franchise Points are rolled. Re-roll to run it again from the same plan.
+        The coaches, Franchise Points, and offense and defense profiles are rolled. Re-roll to run
+        it again from the same plan.
       </p>
       <div className="flex flex-wrap gap-3">
         <ActionButton
@@ -71,8 +81,51 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
         </tbody>
       </table>
 
+      <h3 className="mt-6 text-lg font-semibold">Offense and defense</h3>
+      <div className="overflow-x-auto">
+        <table className="mt-2 w-full border-collapse text-sm">
+          <caption className="sr-only">Off-season draft offense and defense profiles</caption>
+          <thead>
+            <tr className="border-b border-border-strong text-left">
+              {PROFILE_COLUMNS.map((column) => (
+                <th key={column} scope="col" className="py-1 pr-2 font-medium">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {draft.teams.map((team) => (
+              <tr key={team.id} className="border-b border-border align-top">
+                <th scope="row" className="py-1 pr-2 text-left font-normal">
+                  {team.city} {team.nickname}
+                </th>
+                <td className="py-1 pr-2">{PROFILE_LABELS[team.offenseProfile]}</td>
+                <td className="py-1 pr-2">
+                  {team.offenseQualities.length > 0
+                    ? team.offenseQualities.map(qualityLabel).join(", ")
+                    : "None"}
+                  {team.offenseSpecialResult && (
+                    <span className="block text-muted">{team.offenseSpecialResult}</span>
+                  )}
+                </td>
+                <td className="py-1 pr-2">{DEFENSE_PROFILE_LABELS[team.defenseProfile]}</td>
+                <td className="py-1 pr-2">
+                  {team.defenseQualities.length > 0
+                    ? team.defenseQualities.map(qualityLabel).join(", ")
+                    : "None"}
+                  {team.defenseSpecialResult && (
+                    <span className="block text-muted">{team.defenseSpecialResult}</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <h3 className="mt-6 text-lg font-semibold">Run log</h3>
-      <RunLog entries={draft.log} steps={COACH_STEPS} headings={COACH_STEP_HEADINGS} />
+      <RunLog entries={draft.log} steps={STEPS} headings={HEADINGS} />
     </section>
   );
 }

@@ -8,6 +8,9 @@ import {
   type PlanFailure,
 } from "@/lib/offseason-plan";
 import type { Grade, OwnershipLoyalty, OwnershipStyle } from "@/lib/reference/management-tables";
+import type { DefenseProfile, DefenseQuality } from "@/lib/reference/defense-tables";
+import type { OffenseProfile, Quality } from "@/lib/reference/offense-tables";
+import { runAnnualDraft, type AnnualLogEntry, type AnnualTeam } from "@/lib/rules/annual-draft";
 import { runCoaches, type CoachInput, type CoachLogEntry } from "@/lib/rules/coaches";
 
 export type OffseasonFailure =
@@ -17,6 +20,9 @@ export type OffseasonFailure =
   | "already-started"
   | "not-started"
   | Extract<PlanFailure, "too-many" | "too-few" | "division-empty">;
+
+// A line of the off-season log: the coach steps, then the annual draft.
+export type OffseasonLogEntry = CoachLogEntry | AnnualLogEntry;
 
 export type OffseasonResult = { ok: true } | { ok: false; reason: OffseasonFailure };
 
@@ -86,6 +92,8 @@ type TeamRow = {
   ownershipLoyalty: OwnershipLoyalty | null;
   frontOfficeGrade: Grade | null;
   headCoachGrade: Grade | null;
+  offenseProfile: OffenseProfile | null;
+  defenseProfile: DefenseProfile | null;
   hotSeat: number;
   pendingMove: number;
   pendingMoveCity: string | null;
@@ -133,6 +141,7 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
               offense_tag AS offenseTag, ownership_style AS ownershipStyle,
               ownership_loyalty AS ownershipLoyalty, front_office_grade AS frontOfficeGrade,
               head_coach_grade AS headCoachGrade, hot_seat AS hotSeat,
+              offense_profile AS offenseProfile, defense_profile AS defenseProfile,
               pending_move AS pendingMove, pending_move_city AS pendingMoveCity,
               wins, losses, ties, made_playoffs AS madePlayoffs, is_champion AS isChampion
        FROM team_season
@@ -219,7 +228,23 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
     })),
   ];
   const taken = [...kept, ...expansion].map((team) => team.headCoachName);
-  const { teams: coached, log } = runCoaches(inputs, taken, rng);
+  const { teams: coached, log: coachLog } = runCoaches(inputs, taken, rng);
+
+  // Steps 7 and 8 take the teams in the same order, with the FP the coach steps
+  // left them. An expansion team has no previous profile, so it is average.
+  const annualTeams: AnnualTeam[] = inputs.map((input, index) => {
+    const old = kept[index];
+    return {
+      franchiseId: input.franchiseId,
+      teamName: input.teamName,
+      headCoachGrade: coached[index].headCoachGrade,
+      points: coached[index].franchisePoints,
+      previousOffense: old?.offenseProfile ?? "AVERAGE",
+      previousDefense: old?.defenseProfile ?? "AVERAGE",
+    };
+  });
+  const { results: annual, log: annualLog } = runAnnualDraft(annualTeams, rng);
+  const log: OffseasonLogEntry[] = [...coachLog, ...annualLog];
 
   const entries: Entry[] = [
     ...kept.map((team) => ({
@@ -323,11 +348,14 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
   const insertTeam = db.prepare(
     `INSERT INTO team_season (season_id, franchise_id, division_id, position, city, nickname,
        head_coach_name, primary_color, secondary_color, offense_tag, ownership_style,
-       ownership_loyalty, front_office_grade, head_coach_grade, hot_seat, franchise_points)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ownership_loyalty, front_office_grade, head_coach_grade, hot_seat, franchise_points,
+       offense_profile, offense_qualities, offense_special_result,
+       defense_profile, defense_qualities, defense_special_result)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
   order.forEach(({ entry, index }, position) => {
     const hired = coached[index];
+    const drafted = annual[index];
     insertTeam.run(
       seasonId,
       entry.franchiseId,
@@ -344,7 +372,13 @@ function buildDraft(db: DatabaseSync, season: SeasonRow, leagueId: number, seed:
       hired.frontOfficeGrade,
       hired.headCoachGrade,
       hired.hotSeat ? 1 : 0,
-      hired.franchisePoints,
+      drafted.pointsLeft,
+      drafted.offenseProfile,
+      JSON.stringify(drafted.offenseQualities),
+      drafted.offenseSpecialResult,
+      drafted.defenseProfile,
+      JSON.stringify(drafted.defenseQualities),
+      drafted.defenseSpecialResult,
     );
   });
 
@@ -429,13 +463,19 @@ export type DraftTeam = {
   ownershipLoyalty: OwnershipLoyalty | null;
   frontOfficeGrade: Grade;
   franchisePoints: number;
+  offenseProfile: OffenseProfile;
+  offenseQualities: Quality[];
+  offenseSpecialResult: string | null;
+  defenseProfile: DefenseProfile;
+  defenseQualities: DefenseQuality[];
+  defenseSpecialResult: string | null;
 };
 
 export type OffseasonDraft = {
   seasonLabel: string;
   seed: number;
   teams: DraftTeam[];
-  log: CoachLogEntry[];
+  log: OffseasonLogEntry[];
 };
 
 export function getOffseasonDraft(db: DatabaseSync, leagueId: number): OffseasonDraft | null {
@@ -458,19 +498,26 @@ export function getOffseasonDraft(db: DatabaseSync, leagueId: number): Offseason
               head_coach_name AS headCoachName, head_coach_grade AS headCoachGrade,
               hot_seat AS hotSeat, ownership_style AS ownershipStyle,
               ownership_loyalty AS ownershipLoyalty, front_office_grade AS frontOfficeGrade,
-              franchise_points AS franchisePoints
+              franchise_points AS franchisePoints,
+              offense_profile AS offenseProfile, offense_qualities AS offenseQualities,
+              offense_special_result AS offenseSpecialResult,
+              defense_profile AS defenseProfile, defense_qualities AS defenseQualities,
+              defense_special_result AS defenseSpecialResult
        FROM team_season
        LEFT JOIN division ON division.id = team_season.division_id
        WHERE team_season.season_id = ?
        ORDER BY team_season.position`,
     )
-    .all(draftId) as (Omit<DraftTeam, "isNew" | "hotSeat"> & { isNew: number; hotSeat: number })[];
+    .all(draftId) as (Omit<
+    DraftTeam,
+    "isNew" | "hotSeat" | "offenseQualities" | "defenseQualities"
+  > & { isNew: number; hotSeat: number; offenseQualities: string; defenseQualities: string })[];
   const log = db
     .prepare(
       `SELECT step, franchise_id AS franchiseId, message
        FROM run_log_entry WHERE run_id = ? ORDER BY position`,
     )
-    .all(run.id) as CoachLogEntry[];
+    .all(run.id) as OffseasonLogEntry[];
 
   return {
     seasonLabel: season.label,
@@ -479,6 +526,8 @@ export function getOffseasonDraft(db: DatabaseSync, leagueId: number): Offseason
       ...team,
       isNew: team.isNew === 1,
       hotSeat: team.hotSeat === 1,
+      offenseQualities: JSON.parse(team.offenseQualities) as Quality[],
+      defenseQualities: JSON.parse(team.defenseQualities) as DefenseQuality[],
     })),
     log,
   };
