@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDatabase } from "@/lib/db";
 import type { LeagueSetupInput } from "@/lib/league-setup";
 import { createLeague, deleteLeague, getLeague, listLeagues } from "@/lib/leagues";
+import { acceptLeague, generateLeague } from "@/lib/runs";
 
 let db: DatabaseSync;
 
@@ -41,6 +42,7 @@ describe("createLeague and getLeague", () => {
       seasonLabel: "2016",
       teamCount: 8,
       xpKickDistance: 15,
+      status: "setup",
       conferences: [],
       divisions: [],
     });
@@ -48,6 +50,17 @@ describe("createLeague and getLeague", () => {
       status: "setup",
       sequence: 1,
     });
+  });
+
+  it("reports the season's status as it moves from setup to draft to accepted", () => {
+    const id = createLeague(db, setup());
+    expect(getLeague(db, id)?.status).toBe("setup");
+
+    generateLeague(db, id, 1);
+    expect(getLeague(db, id)?.status).toBe("draft");
+
+    acceptLeague(db, id);
+    expect(getLeague(db, id)?.status).toBe("accepted");
   });
 
   it("keeps divisions in the order they were entered", () => {

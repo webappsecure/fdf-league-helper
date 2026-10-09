@@ -66,6 +66,18 @@ const PAIRS = [
   ["EFFICIENT", "INEFFICIENT"],
 ];
 
+// A generated 8-team league, on its page as a draft.
+async function createDraft(page: Page, label: string): Promise<void> {
+  await createLeague(page, label);
+  await page.getByRole("button", { name: "Generate league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+}
+
+// The whole generation log, one string per step. Reads collapsed steps too.
+function logText(page: Page): Promise<string[]> {
+  return page.getByRole("main").locator("details").allTextContents();
+}
+
 test("offers generation on a new league and shows no results yet", async ({ page }) => {
   await createLeague(page, "Fresh League");
 
@@ -311,4 +323,115 @@ test("shows why generation failed and lets the user try again", async ({ page, c
   );
   await expect(button).toBeEnabled();
   await expect(page.getByRole("heading", { level: 2, name: "Management" })).toHaveCount(0);
+});
+
+test("shows a generated league as a draft and re-rolls it in full", async ({ page }) => {
+  await createDraft(page, "Rerolled League");
+
+  await expect(page.getByRole("heading", { level: 2, name: "Generate league" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Accept league" })).toBeEnabled();
+  const before = await logText(page);
+  expect(before).toHaveLength(11);
+
+  await page.getByRole("button", { name: "Re-roll league" }).click();
+
+  await expect.poll(() => logText(page)).not.toEqual(before);
+  await expect(page.getByRole("button", { name: "Re-roll league" })).toBeEnabled();
+  const after = await logText(page);
+  expect(after).toHaveLength(11);
+  for (const name of [/management$/, /offense$/, /defense$/, /special teams$/]) {
+    expect(await tableRows(page, name)).toHaveLength(8);
+  }
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+
+  // The re-roll replaced the draft: a reload shows the new one.
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+  expect(await logText(page)).toEqual(after);
+});
+
+test("re-rolls a renamed team under its new name", async ({ page }) => {
+  await createDraft(page, "Renamed Draft");
+  const city = page.getByRole("textbox", { name: / city$/ }).first();
+  await city.fill("Rerolled Town");
+  await city.blur();
+  await expect(
+    page.getByRole("table", { name: /management$/ }).getByRole("rowheader").first(),
+  ).toContainText("Rerolled Town");
+  const firstLine = page.getByRole("main").locator("details").first().getByRole("listitem").first();
+  await page.getByRole("main").locator("details summary").first().click();
+  await expect(firstLine).not.toContainText("Rerolled Town");
+
+  await page.getByRole("button", { name: "Re-roll league" }).click();
+
+  await expect(firstLine).toContainText(/^Rerolled Town .+: style roll/);
+});
+
+test("keeps the league a draft when accepting is cancelled", async ({ page }) => {
+  await createDraft(page, "Undecided League");
+
+  await page.getByRole("button", { name: "Accept league" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: /^Accept Undecided League .+\?$/ })).toBeVisible();
+  await expect(dialog).toContainText("The league can no longer be re-rolled.");
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("button", { name: "Accept league" })).toBeFocused();
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Re-roll league" })).toBeEnabled();
+});
+
+test("accepts a draft as the official season", async ({ page }) => {
+  await createDraft(page, "Official League");
+  const management = await managementRows(page);
+  const log = await logText(page);
+
+  await page.getByRole("button", { name: "Accept league" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await expect(page.getByRole("main")).toContainText("Its results can no longer be re-rolled.");
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 2, name: "Generate league" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Re-roll league|Accept league|Generate league/ })).toHaveCount(0);
+  expect(await managementRows(page)).toEqual(management);
+  expect(await logText(page)).toEqual(log);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Re-roll league|Accept league/ })).toHaveCount(0);
+
+  // Identity stays editable after a season is accepted.
+  const city = page.getByRole("textbox", { name: / city$/ }).first();
+  await city.fill("Official Town");
+  await city.blur();
+  await expect(
+    page.getByRole("table", { name: /management$/ }).getByRole("rowheader").first(),
+  ).toContainText("Official Town");
+});
+
+test("refuses to re-roll a league accepted in another tab", async ({ page, context }) => {
+  await createDraft(page, "Stale League");
+  const log = await logText(page);
+
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await other.getByRole("button", { name: "Accept league" }).click();
+  await other.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+  await expect(other.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await other.close();
+
+  await page.getByRole("button", { name: "Re-roll league" }).click();
+
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText(
+    "This league has been accepted and can no longer be re-rolled.",
+  );
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  expect(await logText(page)).toEqual(log);
 });

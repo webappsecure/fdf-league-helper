@@ -4,7 +4,11 @@ vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => ({})) }));
 vi.mock("@/lib/leagues", () => ({ deleteLeague: vi.fn() }));
-vi.mock("@/lib/runs", () => ({ generateLeague: vi.fn() }));
+vi.mock("@/lib/runs", () => ({
+  acceptLeague: vi.fn(),
+  generateLeague: vi.fn(),
+  rerollLeague: vi.fn(),
+}));
 vi.mock("@/lib/teams", () => ({
   fillTeams: vi.fn(),
   rerollTeamField: vi.fn(),
@@ -14,18 +18,21 @@ vi.mock("@/lib/teams", () => ({
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { deleteLeague } from "@/lib/leagues";
-import { generateLeague } from "@/lib/runs";
+import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField, type Team } from "@/lib/teams";
 import {
+  acceptLeagueAction,
   deleteLeagueAction,
   fillTeamsAction,
   generateLeagueAction,
+  rerollLeagueAction,
   rerollTeamFieldAction,
   updateTeamFieldAction,
 } from "./actions";
 
 const TEAM_NOT_FOUND = { success: false, error: "That team could not be found." };
 const SAVE_FAILED = { success: false, error: "Something went wrong. Try again." };
+const LEAGUE_NOT_FOUND = { success: false, error: "That league could not be found." };
 const BAD_IDS = [0, -1, 1.5, Number.NaN, "7", null, undefined] as unknown as number[];
 
 const team: Team = {
@@ -212,8 +219,6 @@ describe("fillTeamsAction", () => {
 });
 
 describe("generateLeagueAction", () => {
-  const LEAGUE_NOT_FOUND = { success: false, error: "That league could not be found." };
-
   it.each(BAD_IDS)("rejects the league id %j", async (id) => {
     expect(await generateLeagueAction(id)).toEqual(LEAGUE_NOT_FOUND);
     expect(generateLeague).not.toHaveBeenCalled();
@@ -245,6 +250,78 @@ describe("generateLeagueAction", () => {
     const [, leagueId, seed] = vi.mocked(generateLeague).mock.calls[0];
     expect(leagueId).toBe(3);
     expect(Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32).toBe(true);
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+});
+
+describe("rerollLeagueAction", () => {
+  it.each(BAD_IDS)("rejects the league id %j", async (id) => {
+    expect(await rerollLeagueAction(id)).toEqual(LEAGUE_NOT_FOUND);
+    expect(rerollLeague).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not-found", "That league could not be found."],
+    ["not-generated", "Generate this league first."],
+    ["no-teams", "Fill in teams before generating the league."],
+    ["accepted", "This league has been accepted and can no longer be re-rolled."],
+  ] as const)("explains the %s result without refreshing the page", async (reason, error) => {
+    vi.mocked(rerollLeague).mockReturnValue({ ok: false, reason });
+
+    expect(await rerollLeagueAction(3)).toEqual({ success: false, error });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hides a database failure behind a generic message", async () => {
+    vi.mocked(rerollLeague).mockImplementation(failing);
+
+    expect(await rerollLeagueAction(3)).toEqual(SAVE_FAILED);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("re-rolls with a whole 32-bit seed and refreshes the league page", async () => {
+    vi.mocked(rerollLeague).mockReturnValue({ ok: true, runId: 2 });
+
+    expect(await rerollLeagueAction(3)).toEqual({ success: true });
+    const [, leagueId, seed] = vi.mocked(rerollLeague).mock.calls[0];
+    expect(leagueId).toBe(3);
+    expect(Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32).toBe(true);
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+});
+
+describe("acceptLeagueAction", () => {
+  it.each(BAD_IDS)("rejects the league id %j", async (id) => {
+    expect(await acceptLeagueAction(id)).toEqual(LEAGUE_NOT_FOUND);
+    expect(acceptLeague).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["not-found", "That league could not be found."],
+    ["not-generated", "Generate this league first."],
+    ["already-accepted", "This league has already been accepted."],
+    ["incomplete", "This draft is incomplete. Re-roll the league, then accept it."],
+  ] as const)("explains the %s result without refreshing the page", async (reason, error) => {
+    vi.mocked(acceptLeague).mockReturnValue({ ok: false, reason });
+
+    expect(await acceptLeagueAction(3)).toEqual({ success: false, error });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hides a database failure behind a generic message", async () => {
+    vi.mocked(acceptLeague).mockImplementation(failing);
+
+    expect(await acceptLeagueAction(3)).toEqual(SAVE_FAILED);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("accepts the league and refreshes the league page", async () => {
+    vi.mocked(acceptLeague).mockReturnValue({ ok: true });
+
+    expect(await acceptLeagueAction(3)).toEqual({ success: true });
+    expect(acceptLeague).toHaveBeenCalledWith({}, 3);
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
   });
 });

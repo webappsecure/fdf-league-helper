@@ -4,6 +4,8 @@ import type { Rng } from "@/lib/dice";
 import type { DivisionInput, LeagueSetupInput, XpKickDistance } from "@/lib/league-setup";
 import { insertTeams } from "@/lib/teams";
 
+export type SeasonStatus = "setup" | "draft" | "accepted";
+
 export type LeagueSummary = {
   id: number;
   name: string;
@@ -16,6 +18,7 @@ export type ConferenceDetail = { id: number; name: string; divisions: DivisionDe
 
 export type LeagueDetail = LeagueSummary & {
   xpKickDistance: XpKickDistance;
+  status: SeasonStatus;
   conferences: ConferenceDetail[];
   // Divisions that do not belong to a conference.
   divisions: DivisionDetail[];
@@ -75,12 +78,16 @@ export function createLeague(
 const SUMMARY_SELECT = `
   SELECT league.id AS id, league.name AS name, season.id AS seasonId,
          season.label AS seasonLabel, season.team_count AS teamCount,
-         season.xp_kick_distance AS xpKickDistance
+         season.xp_kick_distance AS xpKickDistance, season.status AS status
   FROM league
   JOIN season ON season.league_id = league.id AND season.sequence = 1
 `;
 
-type SummaryRow = LeagueSummary & { seasonId: number; xpKickDistance: XpKickDistance };
+type SummaryRow = LeagueSummary & {
+  seasonId: number;
+  xpKickDistance: XpKickDistance;
+  status: SeasonStatus;
+};
 
 export function listLeagues(db: DatabaseSync): LeagueSummary[] {
   const rows = db
@@ -121,6 +128,7 @@ export function getLeague(db: DatabaseSync, id: number): LeagueDetail | null {
     seasonLabel: row.seasonLabel,
     teamCount: row.teamCount,
     xpKickDistance: row.xpKickDistance,
+    status: row.status,
     conferences: conferences.map((conference) => ({
       ...conference,
       divisions: divisionsOf(conference.id),

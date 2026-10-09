@@ -5,8 +5,9 @@ import { getDb } from "@/lib/db";
 import { getLeague } from "@/lib/leagues";
 import { getGenerationRun } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
+import { AcceptLeague } from "./accept-league";
 import { ActionButton } from "./action-button";
-import { generateLeagueAction } from "./actions";
+import { generateLeagueAction, rerollLeagueAction } from "./actions";
 import { DeleteLeague } from "./delete-league";
 import { ManagementTables } from "./management-table";
 import { ProfileTables } from "./profile-table";
@@ -41,7 +42,7 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
         <TeamTables league={league} teams={teams} />
       </section>
 
-      {!run && teams.length > 0 && (
+      {league.status === "setup" && teams.length > 0 && (
         <section className="mt-8">
           <h2 className="text-lg font-semibold">Generate league</h2>
           <p className="mt-1 text-muted">
@@ -53,6 +54,37 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
             label="Generate league"
             pendingLabel="Generating..."
           />
+        </section>
+      )}
+
+      {league.status === "draft" && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Draft</h2>
+          <p className="mt-1 text-muted">
+            This league is a draft. Re-roll it as many times as you like, then accept it to
+            make the season official.
+          </p>
+          <div className="flex flex-wrap items-start gap-3">
+            <div>
+              <ActionButton
+                action={rerollLeagueAction.bind(null, league.id)}
+                label="Re-roll league"
+                pendingLabel="Re-rolling..."
+              />
+            </div>
+            <div>
+              <AcceptLeague leagueId={league.id} name={league.name} />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {league.status === "accepted" && (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Accepted</h2>
+          <p className="mt-1 text-muted">
+            This season is official. Its results can no longer be re-rolled.
+          </p>
         </section>
       )}
 

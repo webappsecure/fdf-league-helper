@@ -7,13 +7,18 @@ import { getDb } from "@/lib/db";
 import { isRerollField, validateTeamField, type CellResult } from "@/lib/identity";
 import type { ActionFailure } from "@/lib/league-setup";
 import { deleteLeague } from "@/lib/leagues";
-import { generateLeague } from "@/lib/runs";
+import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
 const TEAM_NOT_FOUND: CellResult = { success: false, error: "That team could not be found." };
 // Not typed as CellResult: deleteLeagueAction returns the same failure in its own shape.
 const LEAGUE_NOT_FOUND = { success: false, error: "That league could not be found." } as const;
 const SAVE_FAILED: CellResult = { success: false, error: "Something went wrong. Try again." };
+const NOT_GENERATED: CellResult = { success: false, error: "Generate this league first." };
+const NO_TEAMS: CellResult = {
+  success: false,
+  error: "Fill in teams before generating the league.",
+};
 // One past the largest seed the seeded random source accepts.
 const SEED_LIMIT = 2 ** 32;
 
@@ -103,12 +108,59 @@ export async function generateLeagueAction(leagueId: number): Promise<CellResult
 
   if (!result.ok) {
     if (result.reason === "not-found") return LEAGUE_NOT_FOUND;
+    if (result.reason === "no-teams") return NO_TEAMS;
+    return { success: false, error: "This league has already been generated." };
+  }
+
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export async function rerollLeagueAction(leagueId: number): Promise<CellResult> {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+
+  let result;
+  try {
+    result = rerollLeague(getDb(), leagueId, randomInt(SEED_LIMIT));
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+
+  if (!result.ok) {
+    if (result.reason === "not-found") return LEAGUE_NOT_FOUND;
+    if (result.reason === "not-generated") return NOT_GENERATED;
+    if (result.reason === "no-teams") return NO_TEAMS;
+    return {
+      success: false,
+      error: "This league has been accepted and can no longer be re-rolled.",
+    };
+  }
+
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export async function acceptLeagueAction(leagueId: number): Promise<CellResult> {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+
+  let result;
+  try {
+    result = acceptLeague(getDb(), leagueId);
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+
+  if (!result.ok) {
+    if (result.reason === "not-found") return LEAGUE_NOT_FOUND;
+    if (result.reason === "not-generated") return NOT_GENERATED;
     return {
       success: false,
       error:
-        result.reason === "no-teams"
-          ? "Fill in teams before generating the league."
-          : "This league has already been generated.",
+        result.reason === "incomplete"
+          ? "This draft is incomplete. Re-roll the league, then accept it."
+          : "This league has already been accepted.",
     };
   }
 

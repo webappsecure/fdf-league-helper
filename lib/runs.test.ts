@@ -9,8 +9,8 @@ import { DEFENSE_PAIRS } from "@/lib/reference/defense-tables";
 import { OFFENSE_PAIRS } from "@/lib/reference/offense-tables";
 import { pairIndexIn } from "@/lib/reference/profile-tables";
 import { GENERATION_STEPS } from "@/lib/rules/generation";
-import { generateLeague, getGenerationRun } from "@/lib/runs";
-import { listTeams } from "@/lib/teams";
+import { acceptLeague, generateLeague, getGenerationRun, rerollLeague } from "@/lib/runs";
+import { listTeams, updateTeamField } from "@/lib/teams";
 
 let db: DatabaseSync;
 
@@ -72,6 +72,19 @@ function drafted(leagueId: number) {
     team.fgRange,
     team.xpRange,
   ]);
+}
+
+// Everything a re-roll or an accept may change for one league.
+function snapshot(leagueId: number) {
+  return {
+    status: status(leagueId),
+    teams: listTeams(db, leagueId),
+    run: getGenerationRun(db, leagueId),
+  };
+}
+
+function messages(leagueId: number): string[] {
+  return getGenerationRun(db, leagueId)!.entries.map((entry) => entry.message);
 }
 
 describe("generateLeague", () => {
@@ -309,6 +322,207 @@ describe("generateLeague", () => {
     expect(management(untouched).flat().every((value) => value === null)).toBe(true);
     expect(offense(untouched).flat().every((value) => value === null)).toBe(true);
     expect(drafted(untouched).flat().every((value) => value === null)).toBe(true);
+  });
+});
+
+describe("rerollLeague", () => {
+  it("replaces every team's values, the run and its log, and stays a draft", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    const before = snapshot(id);
+    const managedBefore = management(id);
+
+    const result = rerollLeague(db, id, 2);
+
+    const run = getGenerationRun(db, id)!;
+    expect(result).toEqual({ ok: true, runId: run.id });
+    expect(run.id).not.toBe(before.run!.id);
+    expect(run.seed).toBe(2);
+    expect(status(id)).toBe("draft");
+    expect([count("run"), count("run_log_entry")]).toEqual([1, run.entries.length]);
+    expect(management(id)).not.toEqual(managedBefore);
+    expect(run.entries).not.toEqual(before.run!.entries);
+    expect(listTeams(db, id).every((team) => team.fgRange !== null && team.xpRange !== null)).toBe(
+      true,
+    );
+  });
+
+  it("gives what generating a fresh copy of the league with that seed gives", () => {
+    const rerolled = league(8, 3);
+    const fresh = league(8, 3);
+    generateLeague(db, rerolled, 1);
+
+    rerollLeague(db, rerolled, 5);
+    generateLeague(db, fresh, 5);
+
+    expect(management(rerolled)).toEqual(management(fresh));
+    expect(offense(rerolled)).toEqual(offense(fresh));
+    expect(drafted(rerolled)).toEqual(drafted(fresh));
+    expect(messages(rerolled)).toEqual(messages(fresh));
+  });
+
+  it("can be repeated, keeping one run each time", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+
+    for (const seed of [2, 3, 4]) {
+      expect(rerollLeague(db, id, seed).ok).toBe(true);
+      expect(count("run")).toBe(1);
+      expect(getGenerationRun(db, id)!.seed).toBe(seed);
+    }
+    expect(status(id)).toBe("draft");
+  });
+
+  it("uses the teams' current names", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    const [team] = listTeams(db, id);
+    updateTeamField(db, team.id, "city", "Renamed City");
+
+    rerollLeague(db, id, 2);
+
+    expect(messages(id)[0].startsWith(`Renamed City ${team.nickname}: `)).toBe(true);
+  });
+
+  it("goes back to the previous draft when a team's values cannot be stored", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    const before = snapshot(id);
+    db.exec(`
+      CREATE TRIGGER reject_last BEFORE UPDATE ON team_season WHEN NEW.position = 7
+      BEGIN SELECT RAISE(ABORT, 'rejected'); END;
+    `);
+
+    expect(() => rerollLeague(db, id, 2)).toThrow("rejected");
+
+    expect(snapshot(id)).toEqual(before);
+    expect([count("run"), count("run_log_entry")]).toEqual([1, before.run!.entries.length]);
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("refuses a league that has not been generated and changes nothing", () => {
+    const id = league();
+
+    expect(rerollLeague(db, id, 2)).toEqual({ ok: false, reason: "not-generated" });
+
+    expect(status(id)).toBe("setup");
+    expect(count("run")).toBe(0);
+    expect(management(id).flat().every((value) => value === null)).toBe(true);
+  });
+
+  it("refuses an accepted league and changes nothing", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    acceptLeague(db, id);
+    const before = snapshot(id);
+
+    expect(rerollLeague(db, id, 2)).toEqual({ ok: false, reason: "accepted" });
+
+    expect(snapshot(id)).toEqual(before);
+    expect(count("run")).toBe(1);
+  });
+
+  it("refuses a draft with no teams and keeps its run", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    db.exec("DELETE FROM team_season; DELETE FROM franchise;");
+    const run = getGenerationRun(db, id)!;
+
+    expect(rerollLeague(db, id, 2)).toEqual({ ok: false, reason: "no-teams" });
+
+    expect(getGenerationRun(db, id)).toEqual(run);
+    expect(count("run")).toBe(1);
+  });
+
+  it("reports an unknown league", () => {
+    expect(rerollLeague(db, 999, 1)).toEqual({ ok: false, reason: "not-found" });
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("only touches the league it was asked to re-roll", () => {
+    const rerolled = league();
+    const untouched = league();
+    generateLeague(db, rerolled, 1);
+    generateLeague(db, untouched, 1);
+    const before = snapshot(untouched);
+
+    rerollLeague(db, rerolled, 2);
+
+    expect(snapshot(untouched)).toEqual(before);
+    expect(count("run")).toBe(2);
+  });
+});
+
+describe("acceptLeague", () => {
+  it("makes a draft the accepted season and changes nothing else", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    const before = snapshot(id);
+    const rows = [count("run"), count("run_log_entry"), count("team_season")];
+
+    expect(acceptLeague(db, id)).toEqual({ ok: true });
+
+    expect(snapshot(id)).toEqual({ ...before, status: "accepted" });
+    expect([count("run"), count("run_log_entry"), count("team_season")]).toEqual(rows);
+  });
+
+  it("refuses a league that has not been generated", () => {
+    const id = league();
+
+    expect(acceptLeague(db, id)).toEqual({ ok: false, reason: "not-generated" });
+
+    expect(status(id)).toBe("setup");
+  });
+
+  it("refuses a league that is already accepted", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    acceptLeague(db, id);
+
+    expect(acceptLeague(db, id)).toEqual({ ok: false, reason: "already-accepted" });
+
+    expect(status(id)).toBe("accepted");
+  });
+
+  it.each(["defense_profile", "fg_range", "xp_range"])(
+    "refuses a draft with a team that has no %s until it is re-rolled",
+    (column) => {
+      const id = league();
+      generateLeague(db, id, 1);
+      db.exec(`UPDATE team_season SET ${column} = NULL WHERE position = 3`);
+
+      expect(acceptLeague(db, id)).toEqual({ ok: false, reason: "incomplete" });
+      expect(status(id)).toBe("draft");
+
+      rerollLeague(db, id, 2);
+      expect(acceptLeague(db, id)).toEqual({ ok: true });
+    },
+  );
+
+  it("reports an unknown league", () => {
+    expect(acceptLeague(db, 999)).toEqual({ ok: false, reason: "not-found" });
+    expect(db.isTransaction).toBe(false);
+  });
+
+  it("only touches the league it was asked to accept", () => {
+    const accepted = league();
+    const untouched = league();
+    generateLeague(db, accepted, 1);
+    generateLeague(db, untouched, 1);
+    const before = snapshot(untouched);
+
+    acceptLeague(db, accepted);
+
+    expect(snapshot(untouched)).toEqual(before);
+  });
+
+  it("stops an accepted league from being generated again", () => {
+    const id = league();
+    generateLeague(db, id, 1);
+    acceptLeague(db, id);
+
+    expect(generateLeague(db, id, 2)).toEqual({ ok: false, reason: "already-generated" });
+    expect(status(id)).toBe("accepted");
   });
 });
 
