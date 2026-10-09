@@ -435,3 +435,34 @@ test("refuses to re-roll a league accepted in another tab", async ({ page, conte
   await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
   expect(await logText(page)).toEqual(log);
 });
+
+test("shows a refused accept in the dialog and clears it when reopened", async ({
+  page,
+  context,
+}) => {
+  await createDraft(page, "Twice Accepted League");
+
+  // Accepting in another tab makes the accept here a refusal.
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await other.getByRole("button", { name: "Accept league" }).click();
+  await other.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+  await expect(other.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await other.close();
+
+  await page.getByRole("button", { name: "Accept league" }).click();
+  const dialog = page.getByRole("dialog");
+  const confirm = dialog.getByRole("button", { name: "Accept league" });
+  await confirm.click();
+
+  // Scoped to the dialog: Next.js adds its own route announcer with the alert role.
+  await expect(dialog.getByRole("alert")).toHaveText("This league has already been accepted.");
+  await expect(dialog).toBeVisible();
+  await expect(confirm).toBeEnabled();
+
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByRole("button", { name: "Accept league" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toHaveCount(0);
+});
