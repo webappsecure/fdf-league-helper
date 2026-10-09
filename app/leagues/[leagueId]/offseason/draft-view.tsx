@@ -4,13 +4,14 @@ import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
 import { listedText } from "@/lib/cards";
 import { ANNUAL_STEPS, ANNUAL_STEP_HEADINGS } from "@/lib/rules/annual-draft";
 import { COACH_STEPS, COACH_STEP_HEADINGS } from "@/lib/rules/coaches";
+import { CAMP_STEPS, CAMP_STEP_HEADINGS } from "@/lib/rules/training-camp";
 import { rerollOffseasonAction } from "../actions";
 import { ActionButton } from "../action-button";
 import { RunLog } from "../run-log";
 import { DiscardOffseason } from "./offseason-actions";
 
-const STEPS = [...COACH_STEPS, ...ANNUAL_STEPS];
-const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS };
+const STEPS = [...COACH_STEPS, ...ANNUAL_STEPS, ...CAMP_STEPS];
+const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS, ...CAMP_STEP_HEADINGS };
 
 const PROFILE_COLUMNS = ["Team", "Offense", "Defense"];
 

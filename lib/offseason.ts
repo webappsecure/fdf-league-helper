@@ -12,6 +12,7 @@ import type { DefenseProfile, DefenseQuality } from "@/lib/reference/defense-tab
 import type { OffenseProfile, Quality } from "@/lib/reference/offense-tables";
 import { runAnnualDraft, type AnnualLogEntry, type AnnualTeam } from "@/lib/rules/annual-draft";
 import { runCoaches, type CoachInput, type CoachLogEntry } from "@/lib/rules/coaches";
+import { runTrainingCamp, type CampLogEntry, type CampTeam } from "@/lib/rules/training-camp";
 
 export type OffseasonFailure =
   | "not-found"
@@ -21,8 +22,9 @@ export type OffseasonFailure =
   | "not-started"
   | Extract<PlanFailure, "too-many" | "too-few" | "division-empty">;
 
-// A line of the off-season log: the coach steps, then the annual draft.
-export type OffseasonLogEntry = CoachLogEntry | AnnualLogEntry;
+// A line of the off-season log: the coach steps, the annual draft, then
+// training camp.
+export type OffseasonLogEntry = CoachLogEntry | AnnualLogEntry | CampLogEntry;
 
 export type OffseasonResult = { ok: true } | { ok: false; reason: OffseasonFailure };
 
@@ -237,7 +239,8 @@ function coachInputs(
 }
 
 // Runs the off-season rules: the coach steps, then steps 7 and 8 with the FP the
-// coach steps left. An expansion team has no previous profile, so it is average.
+// coach steps left, then training camp steps 1 to 6. An expansion team has no
+// previous profile, so it is average.
 function runRules(kept: TeamRow[], inputs: CoachInput[], taken: string[], rng: Rng) {
   const { teams: coached, log: coachLog } = runCoaches(inputs, taken, rng);
   const annualTeams: AnnualTeam[] = inputs.map((input, index) => {
@@ -252,8 +255,18 @@ function runRules(kept: TeamRow[], inputs: CoachInput[], taken: string[], rng: R
     };
   });
   const { results: annual, log: annualLog } = runAnnualDraft(annualTeams, rng);
-  const log: OffseasonLogEntry[] = [...coachLog, ...annualLog];
-  return { coached, annual, log };
+  const campTeams: CampTeam[] = annualTeams.map((team, index) => ({
+    ...team,
+    points: annual[index].pointsLeft,
+    frontOfficeGrade: coached[index].frontOfficeGrade,
+    offenseProfile: annual[index].offenseProfile,
+    defenseProfile: annual[index].defenseProfile,
+    offenseQualities: annual[index].offenseQualities,
+    defenseQualities: annual[index].defenseQualities,
+  }));
+  const { results: camp, log: campLog } = runTrainingCamp(campTeams, rng);
+  const log: OffseasonLogEntry[] = [...coachLog, ...annualLog, ...campLog];
+  return { coached, annual, camp, log };
 }
 
 type OldDivision = { id: number; conferenceId: number | null; name: string; position: number };
@@ -338,6 +351,7 @@ function insertTeams(
   order.forEach(({ entry, index }, position) => {
     const hired = rules.coached[index];
     const drafted = rules.annual[index];
+    const camp = rules.camp[index];
     insertTeam.run(
       seasonId,
       entry.franchiseId,
@@ -351,15 +365,15 @@ function insertTeams(
       entry.offenseTag,
       hired.ownershipStyle,
       hired.ownershipLoyalty,
-      hired.frontOfficeGrade,
+      camp.frontOfficeGrade,
       hired.headCoachGrade,
       hired.hotSeat ? 1 : 0,
-      drafted.pointsLeft,
+      camp.pointsLeft,
       drafted.offenseProfile,
-      JSON.stringify(drafted.offenseQualities),
+      JSON.stringify(camp.offenseQualities),
       drafted.offenseSpecialResult,
       drafted.defenseProfile,
-      JSON.stringify(drafted.defenseQualities),
+      JSON.stringify(camp.defenseQualities),
       drafted.defenseSpecialResult,
     );
   });

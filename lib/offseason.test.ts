@@ -160,11 +160,20 @@ describe("startOffseason", () => {
       expect(team.franchisePoints).toBeGreaterThanOrEqual(0);
     }
 
-    // One run, with the coach steps followed by steps 7 and 8, and each team's
-    // previous profile named in its first Table J line.
+    // One run, with the coach steps followed by steps 7 and 8 and training camp,
+    // and each team's previous profile named in its first Table J line.
     expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
     const steps = [...new Set(draft.log.map((line) => line.step))];
-    expect(steps.slice(-2)).toEqual(["offense-profile", "defense-profile"]);
+    expect(steps.slice(-8)).toEqual([
+      "offense-profile",
+      "defense-profile",
+      "camp-front-office",
+      "camp-qv-cdv",
+      "camp-points",
+      "camp-offense-qualities",
+      "camp-efficiency",
+      "camp-defense-qualities",
+    ]);
     expect(steps.indexOf("ownership-impact")).toBeLessThan(steps.indexOf("offense-profile"));
     const labels: Record<string, string> = {
       PROLIFIC: "PROLIFIC",
@@ -179,6 +188,36 @@ describe("startOffseason", () => {
       const first = draft.log.find((line) => line.message.startsWith(`Table J, ${name} `))!;
       expect(first.message).toContain(`(was ${labels[team.offenseProfile!]})`);
     });
+  });
+
+  it("saves the training camp grade, qualities and FP, and an expansion team keeps its grade", () => {
+    const id = readyLeague(TWO_DIVISIONS);
+    addExpansionTeam(db, id, listTeams(db, id)[0].divisionId, seededRng(3));
+    expect(startOffseason(db, id, 5)).toEqual({ ok: true });
+    const draft = getOffseasonDraft(db, id)!;
+
+    for (const team of draft.teams) {
+      const name = `${team.city} ${team.nickname}`;
+      const line = draft.log.find(
+        (entry) => entry.step === "camp-front-office" && entry.franchiseId === team.franchiseId,
+      )!;
+      expect(line.message.startsWith(`${name}: `)).toBe(true);
+      expect(line.message.endsWith(`to ${team.frontOfficeGrade}.`)).toBe(true);
+      if (team.isNew) expect(line.message).toContain("No change");
+      const added = draft.log.find(
+        (entry) => entry.step === "camp-points" && entry.franchiseId === team.franchiseId,
+      )!;
+      expect(added.message).toContain(`Front Office ${team.frontOfficeGrade} and Head Coach`);
+      expect(team.franchisePoints).toBeGreaterThanOrEqual(0);
+    }
+    const qvLine = draft.log.filter((entry) => entry.step === "camp-qv-cdv");
+    expect(qvLine.map((entry) => entry.message)).toEqual(["9 teams: QV 2, CDV 1."]);
+    // Pair qualities are dealt to someone, and efficiency to at least one team.
+    const names = draft.teams.flatMap((team) => team.offenseQualities.map((q) => q.quality));
+    expect(names).toContain("RELIABLE");
+    expect(names).toContain("EFFICIENT");
+    // The profiles feature 13 set are unchanged by training camp.
+    expect(draft.teams.every((team) => team.offenseProfile && team.defenseProfile)).toBe(true);
   });
 
   it("saves a Table G special result on the team and side that rolled it", () => {

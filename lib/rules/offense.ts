@@ -60,8 +60,10 @@ export function draftRemainingQualities(draft: Draft): void {
   draftSideQualities(draft, OFFENSE);
 }
 
-// Step 11. No Franchise Points may be spent here.
-export function draftEfficiency(draft: Draft): void {
+// Step 11 (training camp step 5). No Franchise Points may be spent here. The
+// teams whose coach has one of `inefficientGrades` join the INEFFICIENT stack:
+// D at league creation, D or F in training camp.
+export function draftEfficiency(draft: Draft, inefficientGrades: Grade[] = ["D"]): void {
   const step = "efficiency";
   const say = (card: Card, message: string) =>
     draft.log.push({ step, franchiseId: card.franchiseId, message });
@@ -71,16 +73,20 @@ export function draftEfficiency(draft: Draft): void {
   const assign = (
     pool: Card[],
     [first, second, third]: string,
-    grade: Grade,
+    grades: Grade[],
     quality: OffenseQuality,
   ) => {
     const deck = shuffle(pool, draft.rng);
     const drawn = deck.splice(0, 2 * draft.qv);
     for (const card of drawn) say(card, `Step ${first}: drew ${card.teamName}.`);
 
-    const graded = deck.filter((card) => card.headCoachGrade === grade);
+    const graded = deck.filter((card) => grades.includes(card.headCoachGrade));
     for (const card of graded) {
-      say(card, `Step ${second}: ${card.teamName} joins the stack with a Head Coach Grade ${grade}.`);
+      say(
+        card,
+        `Step ${second}: ${card.teamName} joins the stack with a Head Coach Grade ` +
+          `${card.headCoachGrade}.`,
+      );
     }
 
     const stack = shuffle([...drawn, ...graded], draft.rng);
@@ -94,11 +100,11 @@ export function draftEfficiency(draft: Draft): void {
     deal(third, "SEMI");
   };
 
-  assign(draft.cards, "ABC", "A", "EFFICIENT");
+  assign(draft.cards, "ABC", ["A"], "EFFICIENT");
   const remaining = draft.cards.filter(
     (card) => !card.offense.qualities.some((entry) => entry.quality === "EFFICIENT"),
   );
-  assign(remaining, "DEF", "D", "INEFFICIENT");
+  assign(remaining, "DEF", inefficientGrades, "INEFFICIENT");
 }
 
 // Steps 8 to 11 on an open draft: the QV and CDV line, then the offense.

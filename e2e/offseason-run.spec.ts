@@ -75,6 +75,16 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
   await expect(page.getByText("Step 6: Ownership impact")).toBeVisible();
   await expect(page.getByText("Step 7: Annual draft and free agency, offense")).toBeVisible();
   await expect(page.getByText("Step 8: Annual draft and free agency, defense")).toBeVisible();
+  for (const heading of [
+    "Training camp step 1: Front office grade",
+    "Training camp step 2: QV and CDV",
+    "Training camp step 3: Franchise Points",
+    "Training camp step 4: Offense qualities",
+    "Training camp step 5: EFFICIENT and INEFFICIENT",
+    "Training camp step 6: Defense qualities",
+  ]) {
+    await expect(page.getByText(heading)).toBeVisible();
+  }
   const profiles = page.getByRole("table", {
     name: "Off-season draft offense and defense profiles",
   });
@@ -94,6 +104,7 @@ test("asks for results first, then runs, re-rolls and discards the off-season", 
   await expect(table.getByRole("row")).toHaveCount(9);
   await expect(profiles.getByRole("row")).toHaveCount(9);
   await expect(page.getByText("Step 7: Annual draft and free agency, offense")).toBeVisible();
+  await expect(page.getByText("Training camp step 6: Defense qualities")).toBeVisible();
 
   // The season stays as it was and the draft does not appear on the league page.
   await page.goto(url);
