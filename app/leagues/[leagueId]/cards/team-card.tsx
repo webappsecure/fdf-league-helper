@@ -105,7 +105,8 @@ export function TeamCard({ team, seasonLabel }: { team: CardTeam; seasonLabel: s
     <article
       aria-label={`${text.city} ${text.teamName} card`}
       style={style}
-      className="@container bg-card-paper text-card-ink"
+      // Browsers drop background fills on paper unless told to keep them.
+      className="@container bg-card-paper text-card-ink [print-color-adjust:exact]"
     >
       <div className={`${condensed.className} p-[1.2em] text-[1.908cqw]`}>
         <header className={`${display.className} relative h-[5.46em]`}>

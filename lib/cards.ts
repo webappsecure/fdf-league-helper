@@ -139,3 +139,15 @@ export function cardColors(
     secondary: surface(secondaryColor, primaryColor),
   };
 }
+
+// A printed letter page holds two columns and three rows of cards.
+export const CARDS_PER_SHEET = 6;
+
+// Splits cards into printed sheets, in order. The last sheet holds the rest.
+export function cardSheets<T>(cards: T[]): T[][] {
+  const sheets: T[][] = [];
+  for (let start = 0; start < cards.length; start += CARDS_PER_SHEET) {
+    sheets.push(cards.slice(start, start + CARDS_PER_SHEET));
+  }
+  return sheets;
+}

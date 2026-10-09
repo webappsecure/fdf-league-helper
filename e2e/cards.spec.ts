@@ -67,6 +67,7 @@ test("offers no cards before a league is generated", async ({ page }) => {
   await page.goto(`${page.url()}/cards`);
   await expect(page.getByText("Generate this league to see its cards.")).toBeVisible();
   await expect(cards(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Print cards" })).toHaveCount(0);
 });
 
 test("shows a card for every team with that team's stored values", async ({ page }) => {
@@ -159,4 +160,125 @@ test("gives the not-found page for a malformed league id", async ({ page }) => {
   await page.goto("/leagues/abc/cards");
 
   await expect(page.getByText("This page could not be found.")).toBeVisible();
+});
+
+function cardNames(scope: Page | Locator): Promise<string[]> {
+  return scope
+    .getByRole("article", { name: / card$/ })
+    .evaluateAll((articles) => articles.map((article) => article.getAttribute("aria-label") ?? ""));
+}
+
+test("prints only sheets of six cards with cut lines between them", async ({ page }) => {
+  const league = await createLeague(page, "Printed Cards", true);
+  await generate(page);
+  await page.getByRole("link", { name: "View team cards" }).click();
+  await expect(cards(page)).toHaveCount(8);
+  const sheets = page.getByRole("list", { name: /^Sheet \d+$/ });
+  await expect(sheets).toHaveCount(0);
+  const onScreen = await cardNames(page);
+
+  await page.emulateMedia({ media: "print" });
+
+  await expect(sheets).toHaveCount(2);
+  await expect(sheets.nth(0).getByRole("article")).toHaveCount(6);
+  await expect(sheets.nth(1).getByRole("article")).toHaveCount(2);
+  expect(await cardNames(page)).toEqual(onScreen);
+
+  await expect(page.getByRole("banner")).toBeHidden();
+  await expect(page.getByRole("link", { name: league })).toBeHidden();
+  await expect(page.getByRole("heading", { level: 1 })).toBeHidden();
+  await expect(page.getByText("Its cards may change.")).toBeHidden();
+  await expect(page.getByRole("button", { name: "Print cards" })).toBeHidden();
+  await expect(page.getByText("Prints six cards per page")).toBeHidden();
+  await expect(page.getByRole("list", { name: "Lakeshore cards" })).toBeHidden();
+
+  // A sheet is the whole page, and a card's printing stands the same distance
+  // inside its cell on every side, give or take the width of a cut line.
+  const sheet = await sheets.nth(0).evaluate((list) => {
+    const box = list.getBoundingClientRect();
+    return [box.width / 96, box.height / 96];
+  });
+  expect(sheet[0]).toBeCloseTo(11, 2);
+  expect(sheet[1]).toBeCloseTo(8.5, 2);
+  const margins = await sheets
+    .nth(0)
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("article") })
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const outer = cell.getBoundingClientRect();
+        const article = cell.querySelector("article")!;
+        const card = article.getBoundingClientRect();
+        const padding = parseFloat(getComputedStyle(article.firstElementChild!).paddingTop);
+        return [
+          card.left - outer.left,
+          card.top - outer.top,
+          outer.right - card.right,
+          outer.bottom - card.bottom,
+        ].map((gap) => (gap + padding) / 96);
+      }),
+    );
+  for (const sides of margins) {
+    expect(Math.min(...sides)).toBeGreaterThan(0.2);
+    expect(Math.max(...sides) - Math.min(...sides)).toBeLessThan(0.03);
+  }
+
+  // Lines run between cells only: right of the left column, under rows one and two.
+  const lines = await sheets
+    .nth(0)
+    .getByRole("listitem")
+    .filter({ has: page.getByRole("article") })
+    .evaluateAll((cells) =>
+      cells.map((cell) => {
+        const style = getComputedStyle(cell);
+        return [
+          style.borderRightWidth === "0px" ? "" : style.borderRightStyle,
+          style.borderBottomWidth === "0px" ? "" : style.borderBottomStyle,
+          style.borderTopWidth === "0px" && style.borderLeftWidth === "0px" ? "" : "outside",
+        ].join("|");
+      }),
+    );
+  expect(lines).toEqual([
+    "dotted|dotted|",
+    "|dotted|",
+    "dotted|dotted|",
+    "|dotted|",
+    "dotted||",
+    "||",
+  ]);
+});
+
+test("opens the print dialog from the print button", async ({ page }) => {
+  await page.addInitScript(() => {
+    const counter = window as unknown as { printCalls: number };
+    counter.printCalls = 0;
+    window.print = () => {
+      counter.printCalls += 1;
+    };
+  });
+  await createLeague(page, "Print Button");
+  await generate(page);
+  await page.getByRole("link", { name: "View team cards" }).click();
+  await expect(
+    page.getByText("Prints six cards per page on letter paper in landscape."),
+  ).toBeVisible();
+
+  await page.getByRole("button", { name: "Print cards" }).click();
+
+  await expect
+    .poll(() => page.evaluate(() => (window as unknown as { printCalls: number }).printCalls))
+    .toBe(1);
+});
+
+test("prints eight cards on two landscape letter pages", async ({ page }) => {
+  await createLeague(page, "Paged Cards");
+  await generate(page);
+  await page.getByRole("link", { name: "View team cards" }).click();
+  await expect(cards(page)).toHaveCount(8);
+
+  const pdf = (await page.pdf({ preferCSSPageSize: true })).toString("latin1");
+
+  // Letter in landscape is 792 by 612 points.
+  expect(pdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(2);
+  expect(pdf.match(/\/MediaBox\s*\[0 0 792 612\]/g)).toHaveLength(2);
 });

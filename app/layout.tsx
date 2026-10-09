@@ -31,7 +31,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
-        <header className="border-b border-border">
+        <header className="border-b border-border print:hidden">
           <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-6 py-4">
             <Link href="/" className="text-lg font-semibold">
               FDF League Helper
@@ -39,7 +39,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <ThemeToggle />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-3xl flex-1 px-6 py-8 print:max-w-none print:p-0">{children}</main>
       </body>
     </html>
   );

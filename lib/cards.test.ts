@@ -5,6 +5,7 @@ import {
   CITY_STEPS,
   TEAM_NAME_STEPS,
   cardColors,
+  cardSheets,
   cardText,
   contrast,
   isCardTeam,
@@ -222,5 +223,24 @@ describe("cardColors", () => {
         }
       }
     }
+  });
+});
+
+describe("cardSheets", () => {
+  it("returns no sheets for no cards", () => {
+    expect(cardSheets([])).toEqual([]);
+  });
+
+  it.each([
+    [1, [1]],
+    [6, [6]],
+    [7, [6, 1]],
+    [8, [6, 2]],
+    [32, [6, 6, 6, 6, 6, 2]],
+  ])("splits %i cards into sheets of six in order", (count, sizes) => {
+    const cards = Array.from({ length: count }, (_, index) => index);
+    const sheets = cardSheets(cards);
+    expect(sheets.map((sheet) => sheet.length)).toEqual(sizes);
+    expect(sheets.flat()).toEqual(cards);
   });
 });
