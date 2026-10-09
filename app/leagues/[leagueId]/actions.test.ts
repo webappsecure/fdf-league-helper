@@ -10,6 +10,7 @@ vi.mock("@/lib/leagues", () => ({
   updateLeagueName: vi.fn(),
   updateSeasonLabel: vi.fn(),
 }));
+vi.mock("@/lib/results", () => ({ saveSeasonResults: vi.fn() }));
 vi.mock("@/lib/runs", () => ({
   acceptLeague: vi.fn(),
   generateLeague: vi.fn(),
@@ -30,6 +31,7 @@ import {
   updateLeagueName,
   updateSeasonLabel,
 } from "@/lib/leagues";
+import { saveSeasonResults } from "@/lib/results";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField, type Team } from "@/lib/teams";
 import {
@@ -40,6 +42,7 @@ import {
   rerollLeagueAction,
   renameGroupAction,
   rerollTeamFieldAction,
+  saveSeasonResultsAction,
   updateLeagueTextAction,
   updateTeamFieldAction,
 } from "./actions";
@@ -520,5 +523,43 @@ describe("acceptLeagueAction", () => {
     expect(await acceptLeagueAction(3)).toEqual({ success: true });
     expect(acceptLeague).toHaveBeenCalledWith({}, 3);
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+});
+
+describe("saveSeasonResultsAction", () => {
+  const payload = { teams: [], championTeamId: null };
+
+  it("saves and revalidates the league and results pages", async () => {
+    vi.mocked(saveSeasonResults).mockReturnValue({ ok: true });
+    expect(await saveSeasonResultsAction(3, payload)).toEqual({ success: true });
+    expect(saveSeasonResults).toHaveBeenCalledWith(expect.anything(), 3, payload);
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/results", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+
+  it("returns the errors of an invalid payload", async () => {
+    const errors = [{ teamId: null, message: "Choose the league champion." }];
+    vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "invalid", errors });
+    expect(await saveSeasonResultsAction(3, payload)).toEqual({ success: false, errors });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("refuses a league that is not accepted", async () => {
+    vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "not-accepted" });
+    expect(await saveSeasonResultsAction(3, payload)).toEqual({
+      success: false,
+      error: "Accept this league before entering results.",
+    });
+  });
+
+  it("reports an unknown league and a bad id", async () => {
+    vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "not-found" });
+    expect(await saveSeasonResultsAction(3, payload)).toEqual(LEAGUE_NOT_FOUND);
+    for (const id of BAD_IDS) expect(await saveSeasonResultsAction(id, payload)).toEqual(LEAGUE_NOT_FOUND);
+  });
+
+  it("hides an unexpected error behind the generic message", async () => {
+    vi.mocked(saveSeasonResults).mockImplementation(failing);
+    expect(await saveSeasonResultsAction(3, payload)).toEqual(SAVE_FAILED);
   });
 });

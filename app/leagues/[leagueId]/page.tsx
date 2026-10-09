@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { LEAGUE_NAME_MAX, SEASON_LABEL_MAX } from "@/lib/league-setup";
 import { getLeague } from "@/lib/leagues";
+import { getSeasonResults } from "@/lib/results";
 import { getGenerationRun } from "@/lib/runs";
 import { resolveView, type LeagueView } from "@/lib/summary";
 import { listTeams } from "@/lib/teams";
@@ -56,6 +57,7 @@ async function LeagueDetails({
 
   const teams = listTeams(getDb(), league.id);
   const run = getGenerationRun(getDb(), league.id);
+  const hasResults = getSeasonResults(getDb(), league.id).length > 0;
   const view = resolveView((await searchParams).view, league.status);
 
   return (
@@ -143,6 +145,14 @@ async function LeagueDetails({
           <h2 className="text-lg font-semibold">Accepted</h2>
           <p className="mt-1 text-muted">
             This season is official. Its results can no longer be re-rolled.
+          </p>
+          <p className="mt-3">
+            <Link
+              href={`/leagues/${league.id}/results`}
+              className="font-medium text-link underline"
+            >
+              {hasResults ? "Edit end-of-season results" : "Enter end-of-season results"}
+            </Link>
           </p>
         </section>
       )}

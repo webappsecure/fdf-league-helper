@@ -13,6 +13,7 @@ import {
   updateLeagueName,
   updateSeasonLabel,
 } from "@/lib/leagues";
+import { saveSeasonResults, type ResultError } from "@/lib/results";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
@@ -223,6 +224,37 @@ export async function acceptLeagueAction(leagueId: number): Promise<CellResult> 
     };
   }
 
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export type SaveResultsResult =
+  | { success: true }
+  | { success: false; error?: string; errors?: ResultError[] };
+
+export async function saveSeasonResultsAction(
+  leagueId: number,
+  input: unknown,
+): Promise<SaveResultsResult> {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+
+  let outcome;
+  try {
+    outcome = saveSeasonResults(getDb(), leagueId, input);
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+
+  if (!outcome.ok) {
+    if (outcome.reason === "not-found") return LEAGUE_NOT_FOUND;
+    if (outcome.reason === "not-accepted") {
+      return { success: false, error: "Accept this league before entering results." };
+    }
+    return { success: false, errors: outcome.errors };
+  }
+
+  revalidatePath("/leagues/[leagueId]/results", "page");
   revalidateLeaguePages();
   return { success: true };
 }

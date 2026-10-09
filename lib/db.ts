@@ -113,6 +113,19 @@ const MIGRATIONS: string[] = [
   ALTER TABLE team_season ADD COLUMN offense_tag TEXT
     CHECK (offense_tag IN ('R', 'R+', 'P', 'P+'));
   `,
+  `
+  -- One row per team for the season it played. One champion per season is
+  -- kept by lib/results.ts, the only writer.
+  CREATE TABLE season_result (
+    team_season_id INTEGER PRIMARY KEY REFERENCES team_season (id) ON DELETE CASCADE,
+    wins INTEGER NOT NULL CHECK (wins BETWEEN 0 AND 99),
+    losses INTEGER NOT NULL CHECK (losses BETWEEN 0 AND 99),
+    ties INTEGER NOT NULL CHECK (ties BETWEEN 0 AND 99),
+    made_playoffs INTEGER NOT NULL CHECK (made_playoffs IN (0, 1)),
+    is_champion INTEGER NOT NULL CHECK (is_champion IN (0, 1)),
+    CHECK (is_champion = 0 OR made_playoffs = 1)
+  );
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

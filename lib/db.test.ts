@@ -40,6 +40,7 @@ describe("openDatabase", () => {
       "run",
       "run_log_entry",
       "season",
+      "season_result",
       "team_season",
     ]);
   });
@@ -54,8 +55,8 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(6);
-    expect(tableNames(file)).toHaveLength(8);
+    expect(user_version).toBe(7);
+    expect(tableNames(file)).toHaveLength(9);
   });
 
   it("upgrades a database from before management rolls and keeps its teams", () => {
@@ -248,9 +249,10 @@ describe("openDatabase", () => {
   it("upgrades a league drafted before defense existed and keeps its offense", () => {
     const file = path.join(dir, "v4.sqlite");
     // A current database wound back to version 4: the columns migrations 5 and
-    // 6 add are dropped, leaving one team with its offense drafted.
+    // 6 add and the table migration 7 adds are dropped, leaving one team with its offense drafted.
     const old = openDatabase(file);
     old.exec(`
+      DROP TABLE season_result;
       ALTER TABLE team_season DROP COLUMN offense_tag;
       ALTER TABLE team_season DROP COLUMN defense_profile;
       ALTER TABLE team_season DROP COLUMN defense_qualities;
@@ -311,7 +313,9 @@ describe("openDatabase", () => {
     );
     generateLeague(first, leagueId, 7);
     // The schema as migration 5 left it.
-    first.exec("ALTER TABLE team_season DROP COLUMN offense_tag; PRAGMA user_version = 5;");
+    first.exec(
+      "DROP TABLE season_result; ALTER TABLE team_season DROP COLUMN offense_tag; PRAGMA user_version = 5;",
+    );
     first.close();
 
     const db = openDatabase(file);
@@ -319,7 +323,7 @@ describe("openDatabase", () => {
     const { user_version } = db.prepare("PRAGMA user_version").get() as {
       user_version: number;
     };
-    expect(user_version).toBe(6);
+    expect(user_version).toBe(7);
     const teams = listTeams(db, leagueId);
     expect(teams).toHaveLength(8);
     expect(teams.every((team) => team.offenseTag === null)).toBe(true);
