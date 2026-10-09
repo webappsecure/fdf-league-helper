@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef, useState, useTransition } from "react";
 import type { LeagueDetail } from "@/lib/leagues";
-import type { ResultError, TeamResult } from "@/lib/results";
+import type { ResultError, ResultField, TeamResult } from "@/lib/results";
 import type { Team } from "@/lib/teams";
 import { saveSeasonResultsAction } from "../actions";
 import { LeagueGroups } from "../league-groups";
@@ -59,23 +59,29 @@ export function ResultsForm({
   const [saving, startTransition] = useTransition();
 
   const teamName = new Map(teams.map((team) => [team.id, `${team.city} ${team.nickname}`]));
-  const errorOf = (teamId: number | null) =>
-    errors.find((error) => error.teamId === teamId)?.message ?? null;
+  const errorOf = (teamId: number | null, field: ResultField | null) =>
+    errors.find((error) => error.teamId === teamId && error.field === field)?.message ?? null;
 
-  function clearError(teamId: number | null) {
-    setErrors((current) => current.filter((error) => error.teamId !== teamId));
+  // Drops the errors of the given fields of one team, or the league-wide ones.
+  function clearError(teamId: number | null, fields: (ResultField | null)[]) {
+    setErrors((current) =>
+      current.filter((error) => error.teamId !== teamId || !fields.includes(error.field)),
+    );
     setMessage(null);
   }
 
   function change(teamId: number, change: Partial<Row>) {
     setRows((current) => ({ ...current, [teamId]: { ...current[teamId], ...change } }));
-    clearError(teamId);
+    clearError(
+      teamId,
+      Object.keys(change).map((key) => (key === "madePlayoffs" ? "playoffs" : (key as Field))),
+    );
   }
 
   function chooseChampion(teamId: number) {
     setChampion(teamId);
     change(teamId, { madePlayoffs: true });
-    clearError(null);
+    clearError(null, [null]);
   }
 
   function save() {
@@ -92,7 +98,9 @@ export function ResultsForm({
       }
       setMessage(null);
       setErrors(
-        result.errors ?? [{ teamId: null, message: result.error ?? "Something went wrong." }],
+        result.errors ?? [
+          { teamId: null, field: null, message: result.error ?? "Something went wrong." },
+        ],
       );
       // The summary mounts with the errors, so focus waits for the next frame.
       requestAnimationFrame(() => summaryRef.current?.focus());
@@ -125,17 +133,26 @@ export function ResultsForm({
           {group.map((team) => {
             const name = teamName.get(team.id) as string;
             const row = rows[team.id];
-            const error = errorOf(team.id);
-            const errorId = `${summaryId}-team-${team.id}`;
+            const idOf = (field: ResultField) => `${summaryId}-${team.id}-${field}`;
+            const teamErrors = errors.filter((error) => error.teamId === team.id);
+            // Points an input at its own message only when it has one.
+            const flag = (field: ResultField) =>
+              errorOf(team.id, field)
+                ? { "aria-invalid": true as const, "aria-describedby": idOf(field) }
+                : {};
             return (
               <tr key={team.id} className="border-b border-border align-top">
                 <th scope="row" className="py-1 pr-2 text-left font-normal">
                   {name}
-                  {error && (
-                    <p id={errorId} className="mt-1 text-xs text-danger">
-                      {error}
+                  {teamErrors.map((error) => (
+                    <p
+                      key={error.field}
+                      id={idOf(error.field as ResultField)}
+                      className="mt-1 text-xs text-danger"
+                    >
+                      {error.message}
                     </p>
-                  )}
+                  ))}
                 </th>
                 {FIELDS.map(({ field, label }) => (
                   <td key={field} className="py-1 pr-2">
@@ -145,8 +162,7 @@ export function ResultsForm({
                       value={row[field]}
                       maxLength={3}
                       aria-label={`${name} ${label.toLowerCase()}`}
-                      aria-invalid={error ? true : undefined}
-                      aria-describedby={error ? errorId : undefined}
+                      {...flag(field)}
                       onChange={(event) => change(team.id, { [field]: event.target.value })}
                       className="w-16 rounded border border-border bg-background px-2 py-1 aria-invalid:border-danger"
                     />
@@ -159,6 +175,7 @@ export function ResultsForm({
                     // The champion stays a playoff team until another is chosen.
                     disabled={champion === team.id}
                     aria-label={`${name} made playoffs`}
+                    {...flag("playoffs")}
                     onChange={(event) => change(team.id, { madePlayoffs: event.target.checked })}
                     className="size-4"
                   />
@@ -181,8 +198,10 @@ export function ResultsForm({
     );
   }
 
-  const leagueError = errorOf(null);
-  const teamErrors = errors.filter((error) => error.teamId !== null);
+  const leagueError = errorOf(null, null);
+  const teamCount = new Set(
+    errors.filter((error) => error.teamId !== null).map((error) => error.teamId),
+  ).size;
 
   return (
     <form
@@ -207,9 +226,9 @@ export function ResultsForm({
         >
           <p className="font-medium">
             {leagueError ??
-              `${teamErrors.length} ${teamErrors.length === 1 ? "team needs" : "teams need"} attention.`}
+              `${teamCount} ${teamCount === 1 ? "team needs" : "teams need"} attention.`}
           </p>
-          {leagueError && teamErrors.length > 0 && <p>Some teams also need attention.</p>}
+          {leagueError && teamCount > 0 && <p>Some teams also need attention.</p>}
         </div>
       )}
 

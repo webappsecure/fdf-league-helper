@@ -36,6 +36,7 @@ function isId(value: unknown): value is number {
 function revalidateLeaguePages(): void {
   revalidatePath("/leagues/[leagueId]", "page");
   revalidatePath("/leagues/[leagueId]/cards", "page");
+  revalidatePath("/leagues/[leagueId]/results", "page");
 }
 
 export async function updateTeamFieldAction(
@@ -254,7 +255,6 @@ export async function saveSeasonResultsAction(
     return { success: false, errors: outcome.errors };
   }
 
-  revalidatePath("/leagues/[leagueId]/results", "page");
   revalidateLeaguePages();
   return { success: true };
 }

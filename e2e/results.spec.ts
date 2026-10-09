@@ -80,6 +80,15 @@ test("shows an error beside a bad value, keeps what was typed and clears it on e
   await expect(alert).toBeFocused();
   await expect(wins(page).nth(3)).toHaveValue("abc");
   await expect(wins(page).nth(3)).toHaveAttribute("aria-invalid", "true");
+  // Only the field that failed is marked, and it is read with its own message.
+  await expect(losses(page).nth(3)).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByRole("textbox", { name: / ties$/ }).nth(3)).not.toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
+  await expect(wins(page).nth(3)).toHaveAccessibleDescription(
+    "Enter wins as a whole number from 0 to 99.",
+  );
   await expect(page.getByText("Enter wins as a whole number from 0 to 99.")).toBeVisible();
 
   await wins(page).nth(3).fill("3");

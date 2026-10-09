@@ -25,8 +25,11 @@ export type TeamResult = {
   isChampion: boolean;
 };
 
-// `teamId` is null for an error that belongs to the whole league.
-export type ResultError = { teamId: number | null; message: string };
+export type ResultField = "wins" | "losses" | "ties" | "playoffs";
+
+// `teamId` and `field` are null for an error that belongs to the whole league,
+// and `field` is null for one that belongs to a team as a whole.
+export type ResultError = { teamId: number | null; field: ResultField | null; message: string };
 
 export type ResultsValidation =
   | { ok: true; results: TeamResult[] }
@@ -34,7 +37,13 @@ export type ResultsValidation =
 
 const BAD_SHAPE: ResultsValidation = {
   ok: false,
-  errors: [{ teamId: null, message: "The results could not be read. Reload the page and try again." }],
+  errors: [
+    {
+      teamId: null,
+      field: null,
+      message: "The results could not be read. Reload the page and try again.",
+    },
+  ],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,16 +94,18 @@ export function validateSeasonResults(
     const wins = toGames(row.wins);
     const losses = toGames(row.losses);
     const ties = row.ties.trim() === "" ? 0 : toGames(row.ties);
-    const bad = [
-      wins === null && `wins`,
-      losses === null && `losses`,
-      ties === null && `ties`,
-    ].filter(Boolean);
+    const fields = { wins, losses, ties };
+    const bad = (Object.keys(fields) as (keyof typeof fields)[]).filter(
+      (field) => fields[field] === null,
+    );
     if (bad.length > 0) {
-      errors.push({
-        teamId: row.teamId,
-        message: `Enter ${bad.join(" and ")} as a whole number from 0 to ${MAX_GAMES}.`,
-      });
+      for (const field of bad) {
+        errors.push({
+          teamId: row.teamId,
+          field,
+          message: `Enter ${field} as a whole number from 0 to ${MAX_GAMES}.`,
+        });
+      }
       continue;
     }
     results.push({
@@ -109,10 +120,11 @@ export function validateSeasonResults(
 
   const champion = rows.find((row) => row.teamId === championTeamId);
   if (!champion) {
-    errors.push({ teamId: null, message: "Choose the league champion." });
+    errors.push({ teamId: null, field: null, message: "Choose the league champion." });
   } else if (!champion.madePlayoffs) {
     errors.push({
       teamId: champion.teamId,
+      field: "playoffs",
       message: "The league champion must be a playoff team.",
     });
   }

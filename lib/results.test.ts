@@ -85,12 +85,29 @@ describe("validateSeasonResults", () => {
     }
   });
 
-  it("names the team whose numbers are wrong", () => {
+  it("names the team and field whose number is wrong", () => {
     const id = league();
     const base = input(id);
     const value = { ...base, teams: base.teams.map((t, i) => (i === 3 ? { ...t, ties: "x" } : t)) };
     expect(errorsOf(value, ids(id))).toEqual([
-      { teamId: base.teams[3].teamId, message: expect.stringContaining("ties") },
+      {
+        teamId: base.teams[3].teamId,
+        field: "ties",
+        message: "Enter ties as a whole number from 0 to 99.",
+      },
+    ]);
+  });
+
+  it("gives each bad field of one team its own error", () => {
+    const id = league();
+    const base = input(id);
+    const value = {
+      ...base,
+      teams: base.teams.map((t, i) => (i === 3 ? { ...t, wins: "", losses: "100" } : t)),
+    };
+    expect(errorsOf(value, ids(id)).map(({ teamId, field }) => [teamId, field])).toEqual([
+      [base.teams[3].teamId, "wins"],
+      [base.teams[3].teamId, "losses"],
     ]);
   });
 
@@ -107,7 +124,9 @@ describe("validateSeasonResults", () => {
       { ...base, teams: [{ teamId: 1 }] },
       { ...base, championTeamId: "1" },
     ]) {
-      expect(errorsOf(value, teamIds)).toEqual([{ teamId: null, message: expect.any(String) }]);
+      expect(errorsOf(value, teamIds)).toEqual([
+        { teamId: null, field: null, message: expect.any(String) },
+      ]);
     }
   });
 
@@ -115,11 +134,15 @@ describe("validateSeasonResults", () => {
     const id = league();
     const base = input(id);
     expect(errorsOf({ ...base, championTeamId: null }, ids(id))).toEqual([
-      { teamId: null, message: "Choose the league champion." },
+      { teamId: null, field: null, message: "Choose the league champion." },
     ]);
     expect(errorsOf({ ...base, championTeamId: 9999 }, ids(id))[0].teamId).toBeNull();
     expect(errorsOf({ ...base, championTeamId: base.teams[5].teamId }, ids(id))).toEqual([
-      { teamId: base.teams[5].teamId, message: "The league champion must be a playoff team." },
+      {
+        teamId: base.teams[5].teamId,
+        field: "playoffs",
+        message: "The league champion must be a playoff team.",
+      },
     ]);
   });
 });

@@ -538,7 +538,7 @@ describe("saveSeasonResultsAction", () => {
   });
 
   it("returns the errors of an invalid payload", async () => {
-    const errors = [{ teamId: null, message: "Choose the league champion." }];
+    const errors = [{ teamId: null, field: null, message: "Choose the league champion." }];
     vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "invalid", errors });
     expect(await saveSeasonResultsAction(3, payload)).toEqual({ success: false, errors });
     expect(revalidatePath).not.toHaveBeenCalled();
