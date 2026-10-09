@@ -14,6 +14,13 @@ import {
   updateSeasonLabel,
 } from "@/lib/leagues";
 import {
+  discardOffseason,
+  rerollOffseason,
+  startOffseason,
+  type OffseasonFailure,
+  type OffseasonResult,
+} from "@/lib/offseason";
+import {
   addExpansionTeam,
   cancelMove,
   planMove,
@@ -263,6 +270,9 @@ export async function saveSeasonResultsAction(
     if (outcome.reason === "not-accepted") {
       return { success: false, error: "Accept this league before entering results." };
     }
+    if (outcome.reason === "offseason-started") {
+      return { success: false, error: "Discard the off-season to change the results." };
+    }
     return { success: false, errors: outcome.errors };
   }
 
@@ -280,6 +290,7 @@ const PLAN_MESSAGES: Record<PlanFailure, string> = {
   "division-empty": "A division must keep at least one team.",
   "no-pending-move": "This team has no pending move.",
   "team-removed": "Keep this team in the league before planning its move.",
+  "offseason-started": "Discard the off-season to change the plan.",
 };
 
 // Runs one change to the pending off-season plan and reports why it was refused.
@@ -334,4 +345,42 @@ export async function planMoveAction(teamId: number): Promise<CellResult> {
 export async function cancelMoveAction(teamId: number): Promise<CellResult> {
   if (!isId(teamId)) return TEAM_NOT_FOUND;
   return runPlanChange(() => cancelMove(getDb(), teamId));
+}
+
+const OFFSEASON_MESSAGES: Record<OffseasonFailure, string> = {
+  "not-found": "That league could not be found.",
+  "not-accepted": "Accept this league first.",
+  "results-missing": "Enter the season results first.",
+  "already-started": "The off-season has already started.",
+  "not-started": "The off-season has not started.",
+  "too-many": PLAN_MESSAGES["too-many"],
+  "too-few": PLAN_MESSAGES["too-few"],
+  "division-empty": PLAN_MESSAGES["division-empty"],
+};
+
+function runOffseason(leagueId: number, run: () => OffseasonResult): CellResult {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+  let result;
+  try {
+    result = run();
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+  if (!result.ok) return { success: false, error: OFFSEASON_MESSAGES[result.reason] };
+
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export async function startOffseasonAction(leagueId: number): Promise<CellResult> {
+  return runOffseason(leagueId, () => startOffseason(getDb(), leagueId, randomInt(SEED_LIMIT)));
+}
+
+export async function rerollOffseasonAction(leagueId: number): Promise<CellResult> {
+  return runOffseason(leagueId, () => rerollOffseason(getDb(), leagueId, randomInt(SEED_LIMIT)));
+}
+
+export async function discardOffseasonAction(leagueId: number): Promise<CellResult> {
+  return runOffseason(leagueId, () => discardOffseason(getDb(), leagueId));
 }

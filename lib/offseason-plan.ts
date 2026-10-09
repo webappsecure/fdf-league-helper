@@ -15,7 +15,8 @@ export type PlanFailure =
   | "division-required"
   | "division-empty"
   | "no-pending-move"
-  | "team-removed";
+  | "team-removed"
+  | "offseason-started";
 
 export type PlanResult = { ok: true } | { ok: false; reason: PlanFailure };
 
@@ -52,9 +53,23 @@ function findSeason(db: DatabaseSync, leagueId: number): SeasonRow | undefined {
     .get(leagueId) as SeasonRow | undefined;
 }
 
-function requireAccepted(season: SeasonRow | undefined): number {
+// True when the league already has a season after this one: the off-season
+// draft. The plan and the results are locked while it exists.
+export function hasLaterSeason(db: DatabaseSync, seasonId: number): boolean {
+  return (
+    db
+      .prepare(
+        `SELECT 1 FROM season later JOIN season this ON this.league_id = later.league_id
+         WHERE this.id = ? AND later.sequence > this.sequence`,
+      )
+      .get(seasonId) !== undefined
+  );
+}
+
+function requireAccepted(db: DatabaseSync, season: SeasonRow | undefined): number {
   if (!season) throw new Refusal("not-found");
   if (season.status !== "accepted") throw new Refusal("not-accepted");
+  if (hasLaterSeason(db, season.id)) throw new Refusal("offseason-started");
   return season.id;
 }
 
@@ -99,6 +114,17 @@ function checkLimits(db: DatabaseSync, seasonId: number): void {
   if (empty) throw new Refusal("division-empty");
 }
 
+// The limit the plan breaks, or null. Callers own the transaction.
+export function planLimitFailure(db: DatabaseSync, seasonId: number): PlanFailure | null {
+  try {
+    checkLimits(db, seasonId);
+    return null;
+  } catch (error) {
+    if (error instanceof Refusal) return error.reason;
+    throw error;
+  }
+}
+
 function heldIdentities(db: DatabaseSync, seasonId: number): Identity[] {
   const select = (table: string) =>
     db
@@ -133,7 +159,7 @@ export function addExpansionTeam(
   rng: Rng,
 ): PlanResult {
   return change(db, () => {
-    const seasonId = requireAccepted(findSeason(db, leagueId));
+    const seasonId = requireAccepted(db, findSeason(db, leagueId));
 
     const divisions = db.prepare("SELECT id FROM division WHERE season_id = ?").all(seasonId) as {
       id: number;
@@ -184,7 +210,7 @@ function findExpansionSeason(db: DatabaseSync, expansionTeamId: number): number 
     )
     .get(expansionTeamId) as SeasonRow | undefined;
   if (!row) throw new Refusal("team-not-found");
-  return requireAccepted(row);
+  return requireAccepted(db, row);
 }
 
 // Rolls a planned team again in full. It keeps its division.
@@ -240,7 +266,7 @@ function findTeam(db: DatabaseSync, teamId: number): TeamRow {
     )
     .get(teamId) as TeamRow | undefined;
   if (!row) throw new Refusal("team-not-found");
-  requireAccepted({ id: row.seasonId, status: row.status });
+  requireAccepted(db, { id: row.seasonId, status: row.status });
   return row;
 }
 
@@ -258,6 +284,21 @@ export function setTeamRemoval(db: DatabaseSync, teamId: number, removed: boolea
   });
 }
 
+// Picks a city for a team's pending move that no team or planned move holds, this
+// team's own planned city included, so a re-roll always changes it. Callers own
+// the transaction.
+export function rollMoveCity(db: DatabaseSync, teamId: number, seasonId: number, rng: Rng): void {
+  const taken = heldIdentities(db, seasonId).map((held) => held.city);
+  const others = db
+    .prepare(
+      `SELECT pending_move_city AS city FROM team_season
+       WHERE season_id = ? AND pending_move_city IS NOT NULL`,
+    )
+    .all(seasonId) as { city: string }[];
+  const city = pickCity([...taken, ...others.map((other) => other.city)], rng);
+  db.prepare("UPDATE team_season SET pending_move_city = ? WHERE id = ?").run(city, teamId);
+}
+
 // Plans the new city of a team with a pending move, or rolls it again.
 export function planMove(db: DatabaseSync, teamId: number, rng: Rng): PlanResult {
   return change(db, () => {
@@ -265,16 +306,7 @@ export function planMove(db: DatabaseSync, teamId: number, rng: Rng): PlanResult
     if (team.pendingMove !== 1) throw new Refusal("no-pending-move");
     if (team.pendingRemoval === 1) throw new Refusal("team-removed");
 
-    const taken = heldIdentities(db, team.seasonId).map((held) => held.city);
-    // Every planned city, this team's own included, so a re-roll always changes it.
-    const others = db
-      .prepare(
-        `SELECT pending_move_city AS city FROM team_season
-         WHERE season_id = ? AND pending_move_city IS NOT NULL`,
-      )
-      .all(team.seasonId) as { city: string }[];
-    const city = pickCity([...taken, ...others.map((other) => other.city)], rng);
-    db.prepare("UPDATE team_season SET pending_move_city = ? WHERE id = ?").run(city, teamId);
+    rollMoveCity(db, team.id, team.seasonId, rng);
   });
 }
 

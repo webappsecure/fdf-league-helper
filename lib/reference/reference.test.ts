@@ -11,6 +11,7 @@ import {
   type DefenseQuality,
 } from "@/lib/reference/defense-tables";
 import { TABLE_A, basePoints, type Grade } from "@/lib/reference/management-tables";
+import { TABLE_B, TABLE_F } from "@/lib/reference/offseason-tables";
 import { NICKNAME_TABLES } from "@/lib/reference/nicknames";
 import {
   DRAFT_PROFILES,
@@ -377,5 +378,15 @@ describe("special teams table", () => {
     ["xp2", "11-66", 0],
   ] as const)("on %s, %s improves on %i of 36 rolls", (column, result, ways) => {
     expect(waysToImprove(TABLE_E[column], result)).toBe(ways);
+  });
+});
+
+describe("Tables B and F", () => {
+  it("Table B has a row for every ascending read of 2d6", () => {
+    expect(Object.keys(TABLE_B).sort()).toEqual([...ASCENDING_KEYS].sort());
+  });
+
+  it("Table F has a row for every d6 face", () => {
+    expect(Object.keys(TABLE_F).map(Number)).toEqual([1, 2, 3, 4, 5, 6]);
   });
 });

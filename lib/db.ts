@@ -152,6 +152,14 @@ const MIGRATIONS: string[] = [
     UNIQUE (season_id, position)
   );
   `,
+  `
+  -- Set by the off-season coaching carousel. Franchise Points are kept only on
+  -- an off-season draft; a generated season spends them while it is generated.
+  ALTER TABLE team_season ADD COLUMN hot_seat INTEGER NOT NULL DEFAULT 0
+    CHECK (hot_seat IN (0, 1));
+  ALTER TABLE team_season ADD COLUMN franchise_points INTEGER
+    CHECK (franchise_points IS NULL OR franchise_points >= 0);
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

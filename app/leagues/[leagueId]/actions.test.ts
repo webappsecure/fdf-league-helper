@@ -10,6 +10,11 @@ vi.mock("@/lib/leagues", () => ({
   updateLeagueName: vi.fn(),
   updateSeasonLabel: vi.fn(),
 }));
+vi.mock("@/lib/offseason", () => ({
+  discardOffseason: vi.fn(),
+  rerollOffseason: vi.fn(),
+  startOffseason: vi.fn(),
+}));
 vi.mock("@/lib/offseason-plan", () => ({
   addExpansionTeam: vi.fn(),
   cancelMove: vi.fn(),
@@ -39,6 +44,7 @@ import {
   updateLeagueName,
   updateSeasonLabel,
 } from "@/lib/leagues";
+import { discardOffseason, rerollOffseason, startOffseason } from "@/lib/offseason";
 import {
   addExpansionTeam,
   cancelMove,
@@ -54,7 +60,10 @@ import {
   acceptLeagueAction,
   addExpansionTeamAction,
   cancelMoveAction,
+  discardOffseasonAction,
   planMoveAction,
+  rerollOffseasonAction,
+  startOffseasonAction,
   removeExpansionTeamAction,
   rerollExpansionTeamAction,
   setTeamRemovalAction,
@@ -581,7 +590,8 @@ describe("saveSeasonResultsAction", () => {
   it("reports an unknown league and a bad id", async () => {
     vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "not-found" });
     expect(await saveSeasonResultsAction(3, payload)).toEqual(LEAGUE_NOT_FOUND);
-    for (const id of BAD_IDS) expect(await saveSeasonResultsAction(id, payload)).toEqual(LEAGUE_NOT_FOUND);
+    for (const id of BAD_IDS)
+      expect(await saveSeasonResultsAction(id, payload)).toEqual(LEAGUE_NOT_FOUND);
   });
 
   it("hides an unexpected error behind the generic message", async () => {
@@ -688,5 +698,75 @@ describe("off-season plan actions", () => {
     expect(await setTeamRemovalAction(3, "yes" as unknown as boolean)).toEqual(TEAM_NOT_FOUND);
     expect(addExpansionTeam).not.toHaveBeenCalled();
     expect(setTeamRemoval).not.toHaveBeenCalled();
+  });
+});
+
+describe("off-season actions", () => {
+  const cases = [
+    { name: "startOffseasonAction", mock: vi.mocked(startOffseason), run: startOffseasonAction },
+    { name: "rerollOffseasonAction", mock: vi.mocked(rerollOffseason), run: rerollOffseasonAction },
+    {
+      name: "discardOffseasonAction",
+      mock: vi.mocked(discardOffseason),
+      run: discardOffseasonAction,
+    },
+  ];
+
+  describe.each(cases)("$name", ({ mock, run }) => {
+    it("succeeds and revalidates the plan page", async () => {
+      mock.mockReturnValue({ ok: true });
+      expect(await run(3)).toEqual({ success: true });
+      expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/offseason", "page");
+    });
+
+    it("rejects a bad id without touching the database", async () => {
+      for (const id of BAD_IDS) expect(await run(id)).toEqual(LEAGUE_NOT_FOUND);
+      expect(mock).not.toHaveBeenCalled();
+    });
+
+    it("hides an unexpected error behind the generic message", async () => {
+      mock.mockImplementation(failing);
+      expect(await run(3)).toEqual(SAVE_FAILED);
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["not-found", "That league could not be found."],
+      ["not-accepted", "Accept this league first."],
+      ["results-missing", "Enter the season results first."],
+      ["already-started", "The off-season has already started."],
+      ["not-started", "The off-season has not started."],
+      ["too-many", "A league can have at most 56 teams."],
+      ["too-few", "A league needs at least 8 teams."],
+      ["division-empty", "A division must keep at least one team."],
+    ] as const)("explains the %s refusal", async (reason, error) => {
+      mock.mockReturnValue({ ok: false, reason });
+      expect(await run(3)).toEqual({ success: false, error });
+      expect(revalidatePath).not.toHaveBeenCalled();
+    });
+  });
+
+  it("passes a seed below 2^32 to start and re-roll", async () => {
+    vi.mocked(startOffseason).mockReturnValue({ ok: true });
+    vi.mocked(rerollOffseason).mockReturnValue({ ok: true });
+    await startOffseasonAction(3);
+    await rerollOffseasonAction(3);
+    for (const mock of [vi.mocked(startOffseason), vi.mocked(rerollOffseason)]) {
+      const seed = mock.mock.calls[0][2];
+      expect(Number.isInteger(seed) && seed >= 0 && seed < 2 ** 32).toBe(true);
+    }
+  });
+
+  it("explains the lock refusals on the plan and the results", async () => {
+    vi.mocked(addExpansionTeam).mockReturnValue({ ok: false, reason: "offseason-started" });
+    expect(await addExpansionTeamAction(3, null)).toEqual({
+      success: false,
+      error: "Discard the off-season to change the plan.",
+    });
+    vi.mocked(saveSeasonResults).mockReturnValue({ ok: false, reason: "offseason-started" });
+    expect(await saveSeasonResultsAction(3, { teams: [], championTeamId: null })).toEqual({
+      success: false,
+      error: "Discard the off-season to change the results.",
+    });
   });
 });

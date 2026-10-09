@@ -56,6 +56,27 @@ function holds(
   }
 }
 
+// Table A: rolls the grade of a newly hired head coach. `asked` is the question
+// the row put, with its answer, for the log.
+export function hireCoach(
+  rng: Rng,
+  style: OwnershipStyle | null,
+  frontOfficeGrade: Grade,
+): { key: string; grade: Grade; asked: string } {
+  const first = rollD6(rng);
+  const second = rollD6(rng);
+  const key = ascendingKey(first, second);
+  const row = TABLE_A[key];
+  let grade = row.yes;
+  let asked = "";
+  if ("question" in row) {
+    const yes = holds(row.question, style, frontOfficeGrade);
+    grade = yes ? row.yes : row.otherwise;
+    asked = ` ${COACH_QUESTION_TEXT[row.question]} ${yes ? "Yes" : "No"}.`;
+  }
+  return { key, grade, asked };
+}
+
 // CE "Create A New League" steps 3, 4, 6 and 7. The whole league finishes one
 // step before the next begins, in the order the teams are given, so a given
 // random source always produces the same league.
@@ -92,17 +113,7 @@ export function rollManagement(
   });
 
   const headCoach = teams.map((team, index) => {
-    const first = rollD6(rng);
-    const second = rollD6(rng);
-    const key = ascendingKey(first, second);
-    const row = TABLE_A[key];
-    let grade = row.yes;
-    let asked = "";
-    if ("question" in row) {
-      const yes = holds(row.question, ownership[index].style, frontOffice[index]);
-      grade = yes ? row.yes : row.otherwise;
-      asked = ` ${COACH_QUESTION_TEXT[row.question]} ${yes ? "Yes" : "No"}.`;
-    }
+    const { key, grade, asked } = hireCoach(rng, ownership[index].style, frontOffice[index]);
     log.push({
       step: "head-coach",
       franchiseId: team.franchiseId,

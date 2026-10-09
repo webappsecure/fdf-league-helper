@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { transaction } from "@/lib/db";
+import { hasLaterSeason } from "@/lib/offseason-plan";
 
 export const MAX_GAMES = 99;
 
@@ -171,6 +172,7 @@ export type SaveResultsOutcome =
   | { ok: true }
   | { ok: false; reason: "not-found" }
   | { ok: false; reason: "not-accepted" }
+  | { ok: false; reason: "offseason-started" }
   | { ok: false; reason: "invalid"; errors: ResultError[] };
 
 // Validates the input and replaces the season's results in one transaction.
@@ -182,6 +184,7 @@ export function saveSeasonResults(
   const season = findSeason(db, leagueId);
   if (!season) return { ok: false, reason: "not-found" };
   if (season.status !== "accepted") return { ok: false, reason: "not-accepted" };
+  if (hasLaterSeason(db, season.seasonId)) return { ok: false, reason: "offseason-started" };
 
   const teamIds = (
     db.prepare("SELECT id FROM team_season WHERE season_id = ?").all(season.seasonId) as {
