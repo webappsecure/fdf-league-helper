@@ -32,7 +32,7 @@ async function colorPair(team: { primary: Locator; secondary: Locator }): Promis
 }
 
 // Resolves once the Server Action started by the given step has answered.
-async function saved(page: Page, step: () => Promise<void>): Promise<void> {
+async function saved(page: Page, step: () => Promise<unknown>): Promise<void> {
   await Promise.all([
     page.waitForResponse((response) => response.request().method() === "POST"),
     step(),
@@ -390,9 +390,60 @@ test("shows a failed offense tag save beside the select and goes back to the sav
   await expect(select).toHaveValue("");
   await expect(select).toHaveAttribute("aria-invalid", "true");
 
-  await select.selectOption("");
+  // Choosing the saved tag again fires no change, so leaving the select clears it.
+  await select.focus();
+  await select.blur();
   await expect(alert).toHaveCount(0);
   await expect(select).not.toHaveAttribute("aria-invalid");
+});
+
+test("keeps focus on the offense tag select while and after it saves", async ({ page }) => {
+  await createLeague(page, "Focused Tag League");
+  const select = firstTeam(page).row.getByRole("combobox");
+
+  await select.focus();
+  await saved(page, () => select.selectOption("R+"));
+
+  await expect(select).toHaveValue("R+");
+  await expect(select).toBeFocused();
+  await expect(select).not.toHaveAttribute("aria-disabled", "true");
+});
+
+test("ignores a second offense tag choice while the first is saving", async ({ page }) => {
+  await createLeague(page, "Busy Tag League");
+  const select = firstTeam(page).row.getByRole("combobox");
+
+  // Hold every save back until released, and count them.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let saves = 0;
+  await page.route("**/leagues/*", async (route) => {
+    if (route.request().method() === "POST") {
+      saves += 1;
+      await held;
+    }
+    await route.continue();
+  });
+
+  await select.selectOption("R");
+  await expect(select).toHaveAttribute("aria-disabled", "true");
+  // A second choice made the way the browser reports one. Playwright's own
+  // selectOption waits for an aria-disabled select to be enabled.
+  await select.evaluate((element: HTMLSelectElement) => {
+    element.value = "P";
+    element.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await expect(select).toHaveValue("R");
+  expect(saves).toBe(1);
+
+  await saved(page, async () => release());
+  await expect(select).not.toHaveAttribute("aria-disabled", "true");
+  await expect(select).toHaveValue("R");
+  expect(saves).toBe(1);
+  await page.reload();
+  await expect(firstTeam(page).row.getByRole("combobox")).toHaveValue("R");
 });
 
 // Two conferences that each have an East, 8 teams in all.

@@ -281,24 +281,25 @@ export function OffenseTagCell({
   const saved = value ?? "";
 
   function choose(tag: string) {
-    if (tag === saved) {
-      setError(null);
-      return;
-    }
+    if (pending) return;
     setChosen(tag);
     run(() => updateTeamFieldAction(teamId, "offenseTag", tag));
   }
 
-  // A failed save leaves the saved value in place, so the select goes back to it.
+  // A failed save leaves the saved value in place, so the select goes back to
+  // it. Choosing that value again fires no change, so leaving the select is
+  // what dismisses the message. While saving the select stays focusable, since
+  // disabling it would drop keyboard focus to the page.
   return (
     <div aria-busy={pending}>
       <select
         value={pending ? chosen : saved}
-        disabled={pending}
+        aria-disabled={pending}
         aria-label={`${teamName} offense tag`}
         aria-invalid={error ? true : undefined}
         aria-describedby={error ? errorId : undefined}
         onChange={(event) => choose(event.target.value)}
+        onBlur={() => setError(null)}
         className="w-full min-w-0 rounded border border-border bg-background px-2 py-1 aria-invalid:border-danger"
       >
         <option value="">None</option>
