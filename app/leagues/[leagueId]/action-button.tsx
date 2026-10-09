@@ -18,6 +18,7 @@ export function ActionButton({
   const [error, setError] = useState<string | null>(null);
 
   function run() {
+    if (pending) return;
     startTransition(async () => {
       const result = await action();
       setError(result.success ? null : result.error);
@@ -29,8 +30,10 @@ export function ActionButton({
       <button
         type="button"
         onClick={run}
-        disabled={pending}
-        className="mt-3 rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover disabled:opacity-60"
+        // Disabling the pressed button would drop keyboard focus to the page, so
+        // it stays focusable and ignores presses while the action runs.
+        aria-disabled={pending}
+        className="mt-3 rounded bg-primary px-4 py-2 font-medium text-on-primary hover:bg-primary-hover aria-disabled:opacity-60"
       >
         {pending ? pendingLabel : label}
       </button>

@@ -66,7 +66,9 @@ function RerollButton({
       type="button"
       aria-label={label}
       title="Re-roll"
-      disabled={pending}
+      // Disabling the pressed button would drop keyboard focus to the page, so
+      // it stays focusable and ignores presses while the save runs.
+      aria-disabled={pending}
       // When focus is in this button's own cell, keep it there. Otherwise the
       // press would blur the cell's text input, start a save of its typed text
       // and disable this button before the click lands. Focus in any other cell
@@ -76,8 +78,10 @@ function RerollButton({
           event.preventDefault();
         }
       }}
-      onClick={() => run(() => rerollTeamFieldAction(teamId, field))}
-      className="shrink-0 rounded border border-border-strong p-1 hover:bg-hover disabled:opacity-60"
+      onClick={() => {
+        if (!pending) run(() => rerollTeamFieldAction(teamId, field));
+      }}
+      className="shrink-0 rounded border border-border-strong p-1 hover:bg-hover aria-disabled:opacity-60"
     >
       <svg
         aria-hidden="true"

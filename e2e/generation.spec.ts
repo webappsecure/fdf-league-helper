@@ -350,6 +350,49 @@ test("shows a generated league as a draft and re-rolls it in full", async ({ pag
   expect(await logText(page)).toEqual(after);
 });
 
+test("keeps focus on Re-roll league after a keyboard re-roll", async ({ page }) => {
+  await createDraft(page, "Focused Reroll");
+  const before = await logText(page);
+  const button = page.getByRole("button", { name: "Re-roll league" });
+
+  await button.focus();
+  await button.press("Enter");
+
+  await expect.poll(() => logText(page)).not.toEqual(before);
+  // The label reads "Re-rolling..." while it runs, so wait for it to come back.
+  await expect(button).toBeEnabled();
+  await expect(button).toBeFocused();
+});
+
+test("ignores a second Re-roll league press while the first is running", async ({ page }) => {
+  await createDraft(page, "Busy Reroll");
+
+  // Hold every request back until released, and count them.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requests = 0;
+  await page.route("**/leagues/*", async (route) => {
+    if (route.request().method() === "POST") {
+      requests += 1;
+      await held;
+    }
+    await route.continue();
+  });
+
+  await page.getByRole("button", { name: "Re-roll league" }).click();
+  const running = page.getByRole("button", { name: "Re-rolling..." });
+  await expect(running).toHaveAttribute("aria-disabled", "true");
+  // Playwright's own click waits for an aria-disabled button, so press it directly.
+  await running.evaluate((button: HTMLButtonElement) => button.click());
+  expect(requests).toBe(1);
+
+  release();
+  await expect(page.getByRole("button", { name: "Re-roll league" })).toBeEnabled();
+  expect(requests).toBe(1);
+});
+
 test("re-rolls a renamed team under its new name", async ({ page }) => {
   await createDraft(page, "Renamed Draft");
   const city = page.getByRole("textbox", { name: / city$/ }).first();

@@ -328,6 +328,50 @@ test("saves the original value again when it is retyped during a save", async ({
   await expect(team.city).toHaveValue(original);
 });
 
+test("keeps focus on a re-roll button after a keyboard re-roll", async ({ page }) => {
+  await createLeague(page, "Focused Reroll League");
+  const team = firstTeam(page);
+  const before = await team.city.inputValue();
+  const button = team.row.getByRole("button", { name: /^Re-roll city for/ });
+
+  await button.focus();
+  await saved(page, () => button.press("Enter"));
+
+  await expect(team.city).not.toHaveValue(before);
+  await expect(button).not.toHaveAttribute("aria-disabled", "true");
+  await expect(button).toBeFocused();
+});
+
+test("ignores a second press of a re-roll button while it saves", async ({ page }) => {
+  await createLeague(page, "Busy Reroll League");
+  const team = firstTeam(page);
+  const button = team.row.getByRole("button", { name: /^Re-roll city for/ });
+
+  // Hold every save back until released, and count them.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let saves = 0;
+  await page.route("**/leagues/*", async (route) => {
+    if (route.request().method() === "POST") {
+      saves += 1;
+      await held;
+    }
+    await route.continue();
+  });
+
+  await button.click();
+  await expect(button).toHaveAttribute("aria-disabled", "true");
+  // Playwright's own click waits for an aria-disabled button, so press it directly.
+  await button.evaluate((element: HTMLButtonElement) => element.click());
+  expect(saves).toBe(1);
+
+  await saved(page, async () => release());
+  await expect(button).not.toHaveAttribute("aria-disabled", "true");
+  expect(saves).toBe(1);
+});
+
 test("re-rolls a cell clicked straight after typing in it", async ({ page }) => {
   await createLeague(page, "Quick League");
   const team = firstTeam(page);
