@@ -2,7 +2,16 @@ import type { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { openDatabase } from "@/lib/db";
 import type { LeagueSetupInput } from "@/lib/league-setup";
-import { createLeague, deleteLeague, getLeague, listLeagues } from "@/lib/leagues";
+import {
+  createLeague,
+  deleteLeague,
+  getLeague,
+  listLeagues,
+  renameConference,
+  renameDivision,
+  updateLeagueName,
+  updateSeasonLabel,
+} from "@/lib/leagues";
 import { acceptLeague, generateLeague } from "@/lib/runs";
 
 let db: DatabaseSync;
@@ -157,6 +166,90 @@ describe("listLeagues", () => {
       { id: 2, name: "Newer", seasonLabel: "2020", teamCount: 10 },
       { id: 1, name: "Older", seasonLabel: "Season 1", teamCount: 8 },
     ]);
+  });
+});
+
+describe("updateLeagueName and updateSeasonLabel", () => {
+  it("change one value and leave the rest of the league and other leagues alone", () => {
+    const id = createLeague(db, setup({ name: "Before", seasonLabel: "Season 1" }));
+    const other = createLeague(db, setup({ name: "Other", seasonLabel: "Season 1" }));
+    const before = getLeague(db, id);
+
+    expect(updateLeagueName(db, id, "After")).toBe(true);
+    expect(getLeague(db, id)).toEqual({ ...before, name: "After" });
+    expect(updateSeasonLabel(db, id, "2016")).toBe(true);
+    expect(getLeague(db, id)).toEqual({ ...before, name: "After", seasonLabel: "2016" });
+    expect(getLeague(db, other)).toMatchObject({ name: "Other", seasonLabel: "Season 1" });
+  });
+
+  it("keep the XP kick distance and the status", () => {
+    const id = createLeague(db, setup({ xpKickDistance: 2 }));
+    generateLeague(db, id, 7);
+    acceptLeague(db, id);
+
+    updateSeasonLabel(db, id, "2016");
+
+    expect(getLeague(db, id)).toMatchObject({
+      seasonLabel: "2016",
+      xpKickDistance: 2,
+      status: "accepted",
+    });
+  });
+
+  it("return false for a league that does not exist", () => {
+    expect(updateLeagueName(db, 99, "Nobody")).toBe(false);
+    expect(updateSeasonLabel(db, 99, "Season 9")).toBe(false);
+  });
+});
+
+describe("renameConference and renameDivision", () => {
+  const structure: LeagueSetupInput["structure"] = {
+    kind: "conferences",
+    conferences: [
+      { name: "American", divisions: [{ name: "East", teamCount: 4 }] },
+      { name: "National", divisions: [{ name: "East", teamCount: 4 }] },
+    ],
+  };
+
+  it("rename one conference or division and nothing else", () => {
+    const id = createLeague(db, setup({ structure }));
+    const other = createLeague(db, setup({ structure }));
+    const before = getLeague(db, id)!;
+    const [american, national] = before.conferences;
+
+    expect(renameConference(db, american.id, "Eastern")).toBe(true);
+    expect(renameDivision(db, national.divisions[0].id, "Metro")).toBe(true);
+
+    const after = getLeague(db, id)!;
+    expect(after.conferences.map((conference) => conference.name)).toEqual([
+      "Eastern",
+      "National",
+    ]);
+    expect(
+      after.conferences.map((conference) => conference.divisions.map((division) => division.name)),
+    ).toEqual([["East"], ["Metro"]]);
+    expect(after.conferences[0].divisions[0].teamCount).toBe(4);
+    expect(getLeague(db, other)!.conferences.map((conference) => conference.name)).toEqual([
+      "American",
+      "National",
+    ]);
+  });
+
+  it("name a conference and a division that share an id separately", () => {
+    createLeague(db, setup({ structure }));
+    const [american] = getLeague(db, 1)!.conferences;
+
+    // Conference 1 and division 1 both exist; each call only touches its own table.
+    renameDivision(db, american.divisions[0].id, "Only A Division");
+
+    const league = getLeague(db, 1)!;
+    expect(league.conferences[0].name).toBe("American");
+    expect(league.conferences[0].divisions[0].name).toBe("Only A Division");
+  });
+
+  it("return false when the conference or division does not exist", () => {
+    expect(renameConference(db, 99, "Nobody")).toBe(false);
+    expect(renameDivision(db, 99, "Nobody")).toBe(false);
   });
 });
 

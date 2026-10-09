@@ -30,7 +30,7 @@ export type CardText = {
   // The profile first unless it is AVERAGE, then the qualities in card order.
   offense: string[];
   defense: string[];
-  // Set by the user from feature 9, for example "R+". Printed as OFFENSE [R+].
+  // Set by the user, for example "R+". Printed as OFFENSE [R+].
   offenseTag: string | null;
   // Table G results from feature 13, printed under their side's list.
   offenseSpecialResult: string | null;
@@ -54,7 +54,7 @@ export function cardText(team: CardTeam, seasonLabel: string): CardText {
     seasonLabel,
     offense: listed(PROFILE_LABELS[team.offenseProfile], team.offenseQualities),
     defense: listed(DEFENSE_PROFILE_LABELS[team.defenseProfile], team.defenseQualities),
-    offenseTag: null,
+    offenseTag: team.offenseTag,
     offenseSpecialResult: null,
     defenseSpecialResult: null,
     kickReturn: team.kickReturn ? resultLabel(team.kickReturn) : "",

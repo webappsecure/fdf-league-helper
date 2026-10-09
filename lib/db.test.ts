@@ -4,7 +4,8 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb, openDatabase, transaction } from "@/lib/db";
-import { getLeague } from "@/lib/leagues";
+import { seededRng } from "@/lib/dice";
+import { createLeague, getLeague } from "@/lib/leagues";
 import { generateLeague, getGenerationRun } from "@/lib/runs";
 import { fillTeams, listTeams } from "@/lib/teams";
 
@@ -53,7 +54,7 @@ describe("openDatabase", () => {
     };
     db.close();
 
-    expect(user_version).toBe(5);
+    expect(user_version).toBe(6);
     expect(tableNames(file)).toHaveLength(8);
   });
 
@@ -246,10 +247,11 @@ describe("openDatabase", () => {
 
   it("upgrades a league drafted before defense existed and keeps its offense", () => {
     const file = path.join(dir, "v4.sqlite");
-    // A current database wound back to version 4: the six columns migration 5
-    // adds are dropped, leaving one team with its offense drafted.
+    // A current database wound back to version 4: the columns migrations 5 and
+    // 6 add are dropped, leaving one team with its offense drafted.
     const old = openDatabase(file);
     old.exec(`
+      ALTER TABLE team_season DROP COLUMN offense_tag;
       ALTER TABLE team_season DROP COLUMN defense_profile;
       ALTER TABLE team_season DROP COLUMN defense_qualities;
       ALTER TABLE team_season DROP COLUMN kick_return;
@@ -290,6 +292,43 @@ describe("openDatabase", () => {
       db.exec("UPDATE team_season SET defense_profile = 'SPLENDID' WHERE id = 1"),
     ).toThrow();
     expect(() => db.exec("UPDATE team_season SET kick_return = 'SHOCKING' WHERE id = 1")).toThrow();
+    db.close();
+  });
+
+  it("upgrades a generated league from before offense tags and leaves its teams untagged", () => {
+    const file = path.join(dir, "v5.sqlite");
+    const first = openDatabase(file);
+    const leagueId = createLeague(
+      first,
+      {
+        name: "Old League",
+        seasonLabel: "Season 1",
+        xpKickDistance: 2,
+        teamCount: 8,
+        structure: { kind: "none" },
+      },
+      seededRng(3),
+    );
+    generateLeague(first, leagueId, 7);
+    // The schema as migration 5 left it.
+    first.exec("ALTER TABLE team_season DROP COLUMN offense_tag; PRAGMA user_version = 5;");
+    first.close();
+
+    const db = openDatabase(file);
+
+    const { user_version } = db.prepare("PRAGMA user_version").get() as {
+      user_version: number;
+    };
+    expect(user_version).toBe(6);
+    const teams = listTeams(db, leagueId);
+    expect(teams).toHaveLength(8);
+    expect(teams.every((team) => team.offenseTag === null)).toBe(true);
+    expect(teams.every((team) => team.offenseProfile !== null)).toBe(true);
+    expect(() =>
+      db.prepare("UPDATE team_season SET offense_tag = 'X' WHERE id = ?").run(teams[0].id),
+    ).toThrow();
+    db.prepare("UPDATE team_season SET offense_tag = 'P+' WHERE id = ?").run(teams[0].id);
+    expect(listTeams(db, leagueId)[0].offenseTag).toBe("P+");
     db.close();
   });
 

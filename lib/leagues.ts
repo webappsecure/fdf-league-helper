@@ -137,6 +137,30 @@ export function getLeague(db: DatabaseSync, id: number): LeagueDetail | null {
   };
 }
 
+// Both return false when the league does not exist.
+export function updateLeagueName(db: DatabaseSync, leagueId: number, name: string): boolean {
+  const result = db.prepare("UPDATE league SET name = ? WHERE id = ?").run(name, leagueId);
+  return Number(result.changes) > 0;
+}
+
+export function updateSeasonLabel(db: DatabaseSync, leagueId: number, label: string): boolean {
+  const result = db
+    .prepare("UPDATE season SET label = ? WHERE league_id = ? AND sequence = 1")
+    .run(label, leagueId);
+  return Number(result.changes) > 0;
+}
+
+// Both return false when the conference or division does not exist.
+export function renameConference(db: DatabaseSync, id: number, name: string): boolean {
+  const result = db.prepare("UPDATE conference SET name = ? WHERE id = ?").run(name, id);
+  return Number(result.changes) > 0;
+}
+
+export function renameDivision(db: DatabaseSync, id: number, name: string): boolean {
+  const result = db.prepare("UPDATE division SET name = ? WHERE id = ?").run(name, id);
+  return Number(result.changes) > 0;
+}
+
 export function deleteLeague(db: DatabaseSync, id: number): void {
   db.prepare("DELETE FROM league WHERE id = ?").run(id);
 }

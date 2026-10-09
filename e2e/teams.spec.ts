@@ -62,7 +62,16 @@ test("fills every team under its conference and division", async ({ page }) => {
   await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
 
   const main = page.getByRole("main");
-  await expect(main.getByRole("heading", { level: 3 })).toHaveText(["American", "National"]);
+  // Each conference name is an input inside its heading.
+  await expect(main.getByRole("heading", { level: 3 })).toHaveCount(2);
+  await expect(main.getByRole("heading", { level: 3, name: "American" })).toBeVisible();
+  await expect(main.getByRole("heading", { level: 3, name: "National" })).toBeVisible();
+  const conferenceNames = main.getByRole("textbox", { name: / conference name$/ });
+  expect(
+    await conferenceNames.evaluateAll((inputs) =>
+      inputs.map((input) => (input as HTMLInputElement).value),
+    ),
+  ).toEqual(["American", "National"]);
   const tables = main.getByRole("table");
   await expect(tables).toHaveCount(4);
   // Each table has a header row and one row per team in its division.
@@ -74,6 +83,7 @@ test("fills every team under its conference and division", async ({ page }) => {
     "Nickname",
     "Head coach",
     "Colors",
+    "Offense tag",
   ]);
 
   // Matched by name because color inputs are reported as text boxes too.
@@ -346,4 +356,183 @@ test("saves text typed in one cell when another cell is re-rolled", async ({ pag
 
   await page.reload();
   await expect(team.city).toHaveValue("Typed Town");
+});
+
+test("names the offense tag select after its team", async ({ page }) => {
+  await createLeague(page, "Tag Label League");
+  const team = firstTeam(page);
+  const name = `${await team.city.inputValue()} ${await team.nickname.inputValue()}`;
+
+  const select = team.row.getByRole("combobox");
+  await expect(select).toHaveAccessibleName(`${name} offense tag`);
+  await expect(select).toHaveValue("");
+  await expect(select.getByRole("option")).toHaveText(["None", "R", "R+", "P", "P+"]);
+});
+
+test("shows a failed offense tag save beside the select and goes back to the saved tag", async ({
+  page,
+  context,
+}) => {
+  await createLeague(page, "Vanishing Tag League");
+  const select = firstTeam(page).row.getByRole("combobox");
+
+  // Deleting the league in another tab makes the next save here fail.
+  const other = await context.newPage();
+  await other.goto(page.url());
+  await other.getByRole("button", { name: "Delete league" }).click();
+  await other.getByRole("button", { name: "Delete permanently" }).click();
+  await expect(other).toHaveURL(/\/$/);
+  await other.close();
+
+  await select.selectOption("R");
+  const alert = firstTeam(page).row.getByRole("alert");
+  await expect(alert).toHaveText("That team could not be found.");
+  await expect(select).toHaveValue("");
+  await expect(select).toHaveAttribute("aria-invalid", "true");
+
+  await select.selectOption("");
+  await expect(alert).toHaveCount(0);
+  await expect(select).not.toHaveAttribute("aria-invalid");
+});
+
+// Two conferences that each have an East, 8 teams in all.
+async function createStructuredLeague(page: Page, label: string): Promise<void> {
+  const name = uniqueName(label);
+  await page.goto("/leagues/new");
+  await page.getByLabel("League name").fill(name);
+  await page.getByLabel("Number of teams").fill("8");
+  await page.getByLabel("Conferences with divisions").check();
+  for (const [index, conferenceName] of ["American", "National"].entries()) {
+    await page.getByRole("button", { name: "Add conference" }).click();
+    await page.getByLabel("Conference name").nth(index).fill(conferenceName);
+    const conference = page.locator(`[id="field-conferences.${index}.divisions"]`);
+    await conference.getByRole("button", { name: "Add division" }).click();
+    await conference.getByLabel("Division name").nth(0).fill("East");
+    await conference.getByLabel("Teams").nth(0).fill("2");
+    await conference.getByLabel("Division name").nth(1).fill("West");
+    await conference.getByLabel("Teams").nth(1).fill("2");
+  }
+  await page.getByRole("button", { name: "Create league" }).click();
+  await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
+}
+
+test("names every conference and division input after where it sits", async ({ page }) => {
+  await createStructuredLeague(page, "Group Label League");
+
+  await expect(page.getByRole("textbox", { name: / (conference|division) name$/ })).toHaveCount(6);
+  for (const name of [
+    "American conference name",
+    "National conference name",
+    "American East division name",
+    "American West division name",
+    "National East division name",
+    "National West division name",
+  ]) {
+    await expect(page.getByRole("textbox", { name, exact: true })).toBeVisible();
+  }
+});
+
+test("renames a conference and a division and keeps both after a reload", async ({ page }) => {
+  await createStructuredLeague(page, "Renamed Groups");
+  // A field's name follows its saved value, so these find the fields by position.
+  const conference = page.getByRole("heading", { level: 3 }).first().getByRole("textbox");
+  const division = page.getByRole("textbox", { name: / division name$/ }).nth(2);
+
+  await saved(page, async () => {
+    await conference.fill("  Eastern ");
+    await conference.press("Enter");
+  });
+  await saved(page, async () => {
+    await division.fill("Metro");
+    await division.blur();
+  });
+
+  await expect(conference).toHaveValue("Eastern");
+  await expect(page.getByRole("table", { name: "Metro teams" })).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Eastern conference name", exact: true }),
+  ).toHaveValue("Eastern");
+  await expect(
+    page.getByRole("textbox", { name: "National Metro division name", exact: true }),
+  ).toHaveValue("Metro");
+  await expect(page.getByRole("heading", { level: 3, name: "Eastern" })).toBeVisible();
+});
+
+test("shows a renamed division in the other sections and on the cards page", async ({ page }) => {
+  await createStructuredLeague(page, "Renamed Cards");
+  const division = page.getByRole("textbox", { name: "American West division name", exact: true });
+  await saved(page, async () => {
+    await division.fill("Pacific");
+    await division.press("Enter");
+  });
+  await page.getByRole("button", { name: "Generate league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+
+  await expect(page.getByRole("table", { name: "Pacific offense" })).toBeVisible();
+  await page.getByRole("link", { name: "View team cards" }).click();
+
+  await expect(page.getByRole("list", { name: "Pacific cards" }).getByRole("article")).toHaveCount(
+    2,
+  );
+  await expect(page.getByRole("list", { name: "West cards" })).toHaveCount(1);
+});
+
+test("shows an empty group name beside its field and keeps the saved name", async ({ page }) => {
+  await createStructuredLeague(page, "Blank Groups");
+
+  for (const [name, error] of [
+    ["American conference name", "Conference name is required."],
+    ["American East division name", "Division name is required."],
+  ] as const) {
+    const field = page.getByRole("textbox", { name, exact: true });
+    const saved_ = await field.inputValue();
+    await saved(page, async () => {
+      await field.fill("   ");
+      await field.press("Enter");
+    });
+
+    const alert = page.getByRole("alert").filter({ hasText: error });
+    await expect(alert).toBeVisible();
+    await expect(field).toHaveAttribute("aria-invalid", "true");
+
+    await field.fill(saved_);
+    await field.blur();
+    await expect(alert).toHaveCount(0);
+    await expect(field).not.toHaveAttribute("aria-invalid");
+  }
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "American conference name", exact: true }),
+  ).toHaveValue("American");
+});
+
+test("renames the conference and division of an accepted league", async ({ page }) => {
+  await createStructuredLeague(page, "Accepted Groups");
+  await page.getByRole("button", { name: "Generate league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Draft" })).toBeVisible();
+  await page.getByRole("button", { name: "Accept league" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeHidden();
+
+  const conference = page.getByRole("textbox", { name: "National conference name", exact: true });
+  await saved(page, async () => {
+    await conference.fill("Western");
+    await conference.press("Enter");
+  });
+  const division = page.getByRole("textbox", { name: "Western West division name", exact: true });
+  await saved(page, async () => {
+    await division.fill("Coast");
+    await division.press("Enter");
+  });
+
+  await page.reload();
+  await expect(
+    page.getByRole("textbox", { name: "Western conference name", exact: true }),
+  ).toHaveValue("Western");
+  await expect(
+    page.getByRole("textbox", { name: "Western Coast division name", exact: true }),
+  ).toHaveValue("Coast");
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
 });

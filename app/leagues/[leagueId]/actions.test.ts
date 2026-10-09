@@ -3,7 +3,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/db", () => ({ getDb: vi.fn(() => ({})) }));
-vi.mock("@/lib/leagues", () => ({ deleteLeague: vi.fn() }));
+vi.mock("@/lib/leagues", () => ({
+  deleteLeague: vi.fn(),
+  renameConference: vi.fn(),
+  renameDivision: vi.fn(),
+  updateLeagueName: vi.fn(),
+  updateSeasonLabel: vi.fn(),
+}));
 vi.mock("@/lib/runs", () => ({
   acceptLeague: vi.fn(),
   generateLeague: vi.fn(),
@@ -17,7 +23,13 @@ vi.mock("@/lib/teams", () => ({
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { deleteLeague } from "@/lib/leagues";
+import {
+  deleteLeague,
+  renameConference,
+  renameDivision,
+  updateLeagueName,
+  updateSeasonLabel,
+} from "@/lib/leagues";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField, type Team } from "@/lib/teams";
 import {
@@ -26,7 +38,9 @@ import {
   fillTeamsAction,
   generateLeagueAction,
   rerollLeagueAction,
+  renameGroupAction,
   rerollTeamFieldAction,
+  updateLeagueTextAction,
   updateTeamFieldAction,
 } from "./actions";
 
@@ -45,6 +59,7 @@ const team: Team = {
   headCoachName: "Adam Adams",
   primaryColor: "#000000",
   secondaryColor: "#ffffff",
+  offenseTag: null,
   ownershipStyle: null,
   ownershipLoyalty: null,
   frontOfficeGrade: null,
@@ -116,6 +131,42 @@ describe("updateTeamFieldAction", () => {
     expect(updateTeamField).not.toHaveBeenCalled();
   });
 
+  it.each([
+    "offenseProfile",
+    "offenseQualities",
+    "defenseProfile",
+    "defenseQualities",
+    "frontOfficeGrade",
+    "headCoachGrade",
+    "ownershipStyle",
+    "ownershipLoyalty",
+    "kickReturn",
+    "puntReturn",
+    "fgRange",
+    "xpRange",
+  ])("locks the rule-generated field %s", async (field) => {
+    expect(await updateTeamFieldAction(7, field, "STAUNCH")).toEqual(TEAM_NOT_FOUND);
+    expect(updateTeamField).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("saves and clears an offense tag", async () => {
+    vi.mocked(updateTeamField).mockReturnValue(true);
+
+    expect(await updateTeamFieldAction(7, "offenseTag", " R+ ")).toEqual({ success: true });
+    expect(updateTeamField).toHaveBeenLastCalledWith({}, 7, "offenseTag", "R+");
+    expect(await updateTeamFieldAction(7, "offenseTag", "")).toEqual({ success: true });
+    expect(updateTeamField).toHaveBeenLastCalledWith({}, 7, "offenseTag", null);
+  });
+
+  it.each(["X", "r", undefined])("rejects the offense tag %j and saves nothing", async (tag) => {
+    expect(await updateTeamFieldAction(7, "offenseTag", tag as string)).toEqual({
+      success: false,
+      error: "Choose an offense tag.",
+    });
+    expect(updateTeamField).not.toHaveBeenCalled();
+  });
+
   it("returns the validation message for a bad value and saves nothing", async () => {
     expect(await updateTeamFieldAction(7, "city", "   ")).toEqual({
       success: false,
@@ -154,6 +205,152 @@ describe("updateTeamFieldAction", () => {
     });
     expect(updateTeamField).toHaveBeenCalledWith({}, 7, "primaryColor", "#ffb612");
     expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+  });
+});
+
+describe("updateLeagueTextAction", () => {
+  it.each(BAD_IDS)("rejects the league id %j", async (id) => {
+    expect(await updateLeagueTextAction(id, "name", "Continental")).toEqual(LEAGUE_NOT_FOUND);
+    expect(updateLeagueName).not.toHaveBeenCalled();
+    expect(updateSeasonLabel).not.toHaveBeenCalled();
+  });
+
+  it.each(["teamCount", "xpKickDistance", "id", "", undefined])(
+    "rejects the field %j",
+    async (field) => {
+      expect(await updateLeagueTextAction(3, field as string, "Continental")).toEqual(
+        LEAGUE_NOT_FOUND,
+      );
+      expect(updateLeagueName).not.toHaveBeenCalled();
+      expect(updateSeasonLabel).not.toHaveBeenCalled();
+    },
+  );
+
+  it("returns the validation message for a bad value and saves nothing", async () => {
+    expect(await updateLeagueTextAction(3, "name", "   ")).toEqual({
+      success: false,
+      error: "League name is required.",
+    });
+    expect(await updateLeagueTextAction(3, "seasonLabel", "x".repeat(31))).toEqual({
+      success: false,
+      error: "Season label must be 30 characters or fewer.",
+    });
+    expect(updateLeagueName).not.toHaveBeenCalled();
+    expect(updateSeasonLabel).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("reports an unknown league without refreshing any page", async () => {
+    vi.mocked(updateLeagueName).mockReturnValue(false);
+    vi.mocked(updateSeasonLabel).mockReturnValue(false);
+
+    expect(await updateLeagueTextAction(3, "name", "Continental")).toEqual(LEAGUE_NOT_FOUND);
+    expect(await updateLeagueTextAction(3, "seasonLabel", "2016")).toEqual(LEAGUE_NOT_FOUND);
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hides a database failure behind a generic message", async () => {
+    vi.mocked(updateLeagueName).mockImplementation(failing);
+
+    expect(await updateLeagueTextAction(3, "name", "Continental")).toEqual(SAVE_FAILED);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("saves the trimmed name and refreshes every page that shows it", async () => {
+    vi.mocked(updateLeagueName).mockReturnValue(true);
+
+    expect(await updateLeagueTextAction(3, "name", "  Continental  ")).toEqual({ success: true });
+    expect(updateLeagueName).toHaveBeenCalledWith({}, 3, "Continental");
+    expect(updateSeasonLabel).not.toHaveBeenCalled();
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/cards", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/");
+  });
+
+  it("saves the trimmed season label", async () => {
+    vi.mocked(updateSeasonLabel).mockReturnValue(true);
+
+    expect(await updateLeagueTextAction(3, "seasonLabel", " 2016 ")).toEqual({ success: true });
+    expect(updateSeasonLabel).toHaveBeenCalledWith({}, 3, "2016");
+    expect(updateLeagueName).not.toHaveBeenCalled();
+  });
+});
+
+describe("renameGroupAction", () => {
+  it.each(BAD_IDS)("rejects the conference id %j", async (id) => {
+    expect(await renameGroupAction("conference", id, "East")).toEqual({
+      success: false,
+      error: "That conference could not be found.",
+    });
+    expect(renameConference).not.toHaveBeenCalled();
+  });
+
+  it.each(BAD_IDS)("rejects the division id %j", async (id) => {
+    expect(await renameGroupAction("division", id, "East")).toEqual({
+      success: false,
+      error: "That division could not be found.",
+    });
+    expect(renameDivision).not.toHaveBeenCalled();
+  });
+
+  it.each(["league", "team", "", undefined])("rejects the kind %j", async (kind) => {
+    expect(await renameGroupAction(kind as string, 4, "East")).toEqual({
+      success: false,
+      error: "That group could not be found.",
+    });
+    expect(renameConference).not.toHaveBeenCalled();
+    expect(renameDivision).not.toHaveBeenCalled();
+  });
+
+  it("returns the validation message for a bad name and saves nothing", async () => {
+    expect(await renameGroupAction("conference", 4, "  ")).toEqual({
+      success: false,
+      error: "Conference name is required.",
+    });
+    expect(await renameGroupAction("division", 4, "x".repeat(51))).toEqual({
+      success: false,
+      error: "Division name must be 50 characters or fewer.",
+    });
+    expect(renameConference).not.toHaveBeenCalled();
+    expect(renameDivision).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("reports an unknown conference or division without refreshing any page", async () => {
+    vi.mocked(renameConference).mockReturnValue(false);
+    vi.mocked(renameDivision).mockReturnValue(false);
+
+    expect(await renameGroupAction("conference", 4, "East")).toEqual({
+      success: false,
+      error: "That conference could not be found.",
+    });
+    expect(await renameGroupAction("division", 4, "East")).toEqual({
+      success: false,
+      error: "That division could not be found.",
+    });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("hides a database failure behind a generic message", async () => {
+    vi.mocked(renameDivision).mockImplementation(failing);
+
+    expect(await renameGroupAction("division", 4, "East")).toEqual(SAVE_FAILED);
+    expect(console.error).toHaveBeenCalledOnce();
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("saves the trimmed name to the right table and refreshes the league pages", async () => {
+    vi.mocked(renameConference).mockReturnValue(true);
+    vi.mocked(renameDivision).mockReturnValue(true);
+
+    expect(await renameGroupAction("conference", 4, " Eastern ")).toEqual({ success: true });
+    expect(renameConference).toHaveBeenCalledWith({}, 4, "Eastern");
+    expect(renameDivision).not.toHaveBeenCalled();
+    expect(await renameGroupAction("division", 5, " Metro ")).toEqual({ success: true });
+    expect(renameDivision).toHaveBeenCalledWith({}, 5, "Metro");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]", "page");
+    expect(revalidatePath).toHaveBeenCalledWith("/leagues/[leagueId]/cards", "page");
   });
 });
 

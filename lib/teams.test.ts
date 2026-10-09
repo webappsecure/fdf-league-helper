@@ -169,6 +169,22 @@ describe("updateTeamField", () => {
     expect(untouched).toEqual(neighbor);
   });
 
+  it("starts a team with no offense tag, then sets, changes and clears it", () => {
+    createLeague(db, setup(), seeded(1));
+    const [team, other] = listTeams(db, 1);
+    expect(team.offenseTag).toBeNull();
+
+    expect(updateTeamField(db, team.id, "offenseTag", "R")).toBe(true);
+    expect(listTeams(db, 1)[0].offenseTag).toBe("R");
+    updateTeamField(db, team.id, "offenseTag", "P+");
+    expect(listTeams(db, 1)[0].offenseTag).toBe("P+");
+    updateTeamField(db, team.id, "offenseTag", null);
+
+    const after = listTeams(db, 1);
+    expect(after[0].offenseTag).toBeNull();
+    expect(after[1].offenseTag).toBe(other.offenseTag);
+  });
+
   it("returns false for an unknown team", () => {
     expect(updateTeamField(db, 999, "city", "Green Bay")).toBe(false);
   });

@@ -3,7 +3,9 @@
 import { useEffect, useEffectEvent, useId, useRef, useState, useTransition } from "react";
 import {
   IDENTITY_TEXT_MAX,
+  OFFENSE_TAGS,
   type CellResult,
+  type OffenseTag,
   type RerollField,
   type TextField,
 } from "@/lib/identity";
@@ -16,7 +18,7 @@ const FIELD_LABELS: Record<TextField, string> = {
 };
 
 // Runs one save or re-roll at a time for a cell and keeps its error message.
-function useCellAction() {
+export function useCellAction() {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -34,7 +36,7 @@ function useCellAction() {
 // which is how a re-roll shows up. While typed text is being saved, `submitted`
 // is the text that was sent, and the input only takes the saved value when it
 // is that same text coming back (trimmed). Anything typed since is kept.
-function useDraft(saved: string, submitted: string | null = null) {
+export function useDraft(saved: string, submitted: string | null = null) {
   const [draft, setDraft] = useState(saved);
   const [lastSaved, setLastSaved] = useState(saved);
   if (saved !== lastSaved) {
@@ -95,7 +97,7 @@ function RerollButton({
   );
 }
 
-function CellError({ id, error }: { id: string; error: string | null }) {
+export function CellError({ id, error }: { id: string; error: string | null }) {
   if (!error) return null;
   return (
     <p id={id} role="alert" className="mt-1 text-xs text-danger">
@@ -259,6 +261,53 @@ export function ColorsCell({
           run={run}
         />
       </div>
+      <CellError id={errorId} error={error} />
+    </div>
+  );
+}
+
+export function OffenseTagCell({
+  teamId,
+  value,
+  teamName,
+}: {
+  teamId: number;
+  value: OffenseTag | null;
+  teamName: string;
+}) {
+  const errorId = useId();
+  const { pending, error, setError, run } = useCellAction();
+  const [chosen, setChosen] = useState("");
+  const saved = value ?? "";
+
+  function choose(tag: string) {
+    if (tag === saved) {
+      setError(null);
+      return;
+    }
+    setChosen(tag);
+    run(() => updateTeamFieldAction(teamId, "offenseTag", tag));
+  }
+
+  // A failed save leaves the saved value in place, so the select goes back to it.
+  return (
+    <div aria-busy={pending}>
+      <select
+        value={pending ? chosen : saved}
+        disabled={pending}
+        aria-label={`${teamName} offense tag`}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+        onChange={(event) => choose(event.target.value)}
+        className="w-full min-w-0 rounded border border-border bg-background px-2 py-1 aria-invalid:border-danger"
+      >
+        <option value="">None</option>
+        {OFFENSE_TAGS.map((tag) => (
+          <option key={tag} value={tag}>
+            {tag}
+          </option>
+        ))}
+      </select>
       <CellError id={errorId} error={error} />
     </div>
   );

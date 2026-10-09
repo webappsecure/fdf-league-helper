@@ -13,12 +13,21 @@ export type Identity = {
 };
 
 export const TEXT_FIELDS = ["city", "nickname", "headCoachName"] as const;
-export const EDIT_FIELDS = [...TEXT_FIELDS, "primaryColor", "secondaryColor"] as const;
+export const EDIT_FIELDS = [
+  ...TEXT_FIELDS,
+  "primaryColor",
+  "secondaryColor",
+  "offenseTag",
+] as const;
 export const REROLL_FIELDS = [...TEXT_FIELDS, "colors"] as const;
 
 export type TextField = (typeof TEXT_FIELDS)[number];
 export type EditField = (typeof EDIT_FIELDS)[number];
 export type RerollField = (typeof REROLL_FIELDS)[number];
+
+// Printed on the OFFENSE bar as [R+]. A team has at most one, set by hand.
+export const OFFENSE_TAGS = ["R", "R+", "P", "P+"] as const;
+export type OffenseTag = (typeof OFFENSE_TAGS)[number];
 
 export type CellResult = { success: true } | { success: false; error: string };
 
@@ -163,7 +172,8 @@ const REQUIRED_MESSAGES: Record<TextField, string> = {
 };
 
 export type FieldValidation =
-  | { ok: true; field: EditField; value: string }
+  // A null value clears the offense tag.
+  | { ok: true; field: EditField; value: string | null }
   | { ok: false; error: string };
 
 export function validateTeamField(field: unknown, value: unknown): FieldValidation {
@@ -172,6 +182,14 @@ export function validateTeamField(field: unknown, value: unknown): FieldValidati
   }
   const editField = field as EditField;
   const text = typeof value === "string" ? value.trim() : "";
+
+  if (editField === "offenseTag") {
+    const chosen = OFFENSE_TAGS.find((tag) => tag === text);
+    if (typeof value !== "string" || (text !== "" && !chosen)) {
+      return { ok: false, error: "Choose an offense tag." };
+    }
+    return { ok: true, field: editField, value: chosen ?? null };
+  }
 
   if (editField === "primaryColor" || editField === "secondaryColor") {
     if (!/^#[0-9a-f]{6}$/i.test(text)) return { ok: false, error: "Choose a color." };

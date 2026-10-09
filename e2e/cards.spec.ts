@@ -282,3 +282,180 @@ test("prints eight cards on two landscape letter pages", async ({ page }) => {
   expect(pdf.match(/\/Type\s*\/Page\b/g)).toHaveLength(2);
   expect(pdf.match(/\/MediaBox\s*\[0 0 792 612\]/g)).toHaveLength(2);
 });
+
+function tagSelect(page: Page): Locator {
+  return page.getByRole("combobox", { name: / offense tag$/ }).first();
+}
+
+// Resolves once the Server Action started by the given step has answered.
+async function saved(page: Page, step: () => Promise<unknown>): Promise<void> {
+  await Promise.all([
+    page.waitForResponse((response) => response.request().method() === "POST"),
+    step(),
+  ]);
+}
+
+test("prints a chosen offense tag on the card and removes it when cleared", async ({ page }) => {
+  await createLeague(page, "Tagged Cards");
+  await generate(page);
+  const leaguePage = page.url();
+
+  await saved(page, () => tagSelect(page).selectOption("R+"));
+  await page.reload();
+  await expect(tagSelect(page)).toHaveValue("R+");
+
+  await page.goto(`${leaguePage}/cards`);
+  const tagged = page.getByRole("region", { name: "Offense [R+]" });
+  await expect(tagged).toHaveCount(1);
+  // The print sheets hold a second copy of every card, hidden on screen.
+  await expect(
+    page.getByText("OFFENSE [R+]", { exact: true }).filter({ visible: true }),
+  ).toHaveCount(1);
+  await expect(page.getByRole("region", { name: "Offense", exact: true })).toHaveCount(7);
+
+  await page.goto(leaguePage);
+  await saved(page, () => tagSelect(page).selectOption(""));
+  await page.goto(`${leaguePage}/cards`);
+  await expect(page.getByRole("region", { name: "Offense", exact: true })).toHaveCount(8);
+  await expect(page.getByText(/OFFENSE \[/).filter({ visible: true })).toHaveCount(0);
+});
+
+test("keeps an offense tag through a re-roll and an accept, and edits an accepted league", async ({
+  page,
+}) => {
+  await createLeague(page, "Accepted Edits");
+  await generate(page);
+  await saved(page, () => tagSelect(page).selectOption("P"));
+
+  await saved(page, () => page.getByRole("button", { name: "Re-roll league" }).click());
+  await expect(tagSelect(page)).toHaveValue("P");
+  await page.getByRole("button", { name: "Accept league" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(tagSelect(page)).toHaveValue("P");
+
+  const row = page.getByRole("table").getByRole("row").nth(1);
+  await saved(page, () => tagSelect(page).selectOption("P+"));
+  await saved(page, async () => {
+    await row.getByRole("textbox").nth(0).fill("Edited City");
+    await row.getByRole("textbox").nth(0).press("Enter");
+  });
+  await saved(page, async () => {
+    await row.getByRole("textbox").nth(1).fill("Editors");
+    await row.getByRole("textbox").nth(1).press("Enter");
+  });
+  await saved(page, async () => {
+    await row.getByRole("textbox").nth(2).fill("Ed Itor");
+    await row.getByRole("textbox").nth(2).press("Enter");
+  });
+  await saved(page, () => row.locator('input[type="color"]').nth(0).fill("#123456"));
+
+  await page.reload();
+  const after = page.getByRole("table").getByRole("row").nth(1);
+  await expect(tagSelect(page)).toHaveValue("P+");
+  await expect(after.getByRole("textbox").nth(0)).toHaveValue("Edited City");
+  await expect(after.getByRole("textbox").nth(1)).toHaveValue("Editors");
+  await expect(after.getByRole("textbox").nth(2)).toHaveValue("Ed Itor");
+  await expect(after.locator('input[type="color"]').nth(0)).toHaveValue("#123456");
+});
+
+test("renames a league everywhere it is shown", async ({ page }) => {
+  await createLeague(page, "Before Rename");
+  await generate(page);
+  const leaguePage = page.url();
+  const renamed = uniqueName("After Rename");
+  const field = page.getByRole("textbox", { name: "League name", exact: true });
+
+  await saved(page, async () => {
+    await field.fill(`  ${renamed}  `);
+    await field.press("Enter");
+  });
+
+  await expect(page.getByRole("heading", { level: 1, name: renamed, exact: true })).toBeVisible();
+  await expect(field).toHaveValue(renamed);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: renamed })).toBeVisible();
+  await page.goto(`${leaguePage}/cards`);
+  await expect(
+    page.getByRole("heading", { level: 1, name: `${renamed} team cards` }),
+  ).toBeVisible();
+});
+
+test("changes the season label on every card and keeps the XP kick distance", async ({ page }) => {
+  await createLeague(page, "Relabelled");
+  await generate(page);
+  const leaguePage = page.url();
+  const field = page.getByRole("textbox", {
+    name: "Season label",
+    exact: true,
+  });
+  await expect(field).toHaveValue("Season 1");
+  const xpKick = page.getByRole("definition").filter({ hasText: "yard line" });
+  await expect(xpKick).toHaveText("2-yard line");
+
+  // A year from 2015 on would default to the 15-yard line for a new league.
+  await saved(page, async () => {
+    await field.fill("2016");
+    await field.blur();
+  });
+  await page.reload();
+  await expect(field).toHaveValue("2016");
+  await expect(xpKick).toHaveText("2-yard line");
+
+  await page.goto(`${leaguePage}/cards`);
+  await expect(cards(page)).toHaveCount(8);
+  for (const card of await cards(page).all()) {
+    await expect(card.locator("header p").nth(3)).toHaveText("2016");
+  }
+});
+
+test("shows an empty league name beside the field and keeps the saved name", async ({ page }) => {
+  const name = await createLeague(page, "Never Blank");
+  const field = page.getByRole("textbox", { name: "League name", exact: true });
+
+  await saved(page, async () => {
+    await field.fill("   ");
+    await field.press("Enter");
+  });
+
+  const alert = page.getByRole("alert").filter({ hasText: "League name is required." });
+  await expect(alert).toBeVisible();
+  await expect(field).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByRole("heading", { level: 1, name, exact: true })).toBeVisible();
+
+  await field.fill(name);
+  await field.blur();
+  await expect(alert).toHaveCount(0);
+  await expect(field).not.toHaveAttribute("aria-invalid");
+  await expect(field).toHaveValue(name);
+});
+
+test("edits the name and season label of an accepted league", async ({ page }) => {
+  await createLeague(page, "Accepted Names");
+  await generate(page);
+  await page.getByRole("button", { name: "Accept league" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "Accept league" }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  // The page behind the dialog is inert until it closes.
+  await expect(page.getByRole("dialog")).toBeHidden();
+  const renamed = uniqueName("Accepted Renamed");
+
+  await saved(page, async () => {
+    await page.getByRole("textbox", { name: "League name", exact: true }).fill(renamed);
+    await page.getByRole("textbox", { name: "League name", exact: true }).press("Enter");
+  });
+  await saved(page, async () => {
+    await page.getByRole("textbox", { name: "Season label", exact: true }).fill("Season 2");
+    await page.getByRole("textbox", { name: "Season label", exact: true }).press("Enter");
+  });
+
+  await page.reload();
+  await expect(page.getByRole("textbox", { name: "League name", exact: true })).toHaveValue(
+    renamed,
+  );
+  await expect(page.getByRole("textbox", { name: "Season label", exact: true })).toHaveValue(
+    "Season 2",
+  );
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+});

@@ -108,6 +108,11 @@ const MIGRATIONS: string[] = [
   ALTER TABLE team_season ADD COLUMN fg_range TEXT;
   ALTER TABLE team_season ADD COLUMN xp_range TEXT;
   `,
+  `
+  -- Set by hand and never generated. Null means the team has no tag.
+  ALTER TABLE team_season ADD COLUMN offense_tag TEXT
+    CHECK (offense_tag IN ('R', 'R+', 'P', 'P+'));
+  `,
 ];
 
 export function transaction<T>(db: DatabaseSync, work: () => T): T {

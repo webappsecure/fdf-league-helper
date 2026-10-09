@@ -149,7 +149,7 @@ export function TeamCard({ team, seasonLabel }: { team: CardTeam; seasonLabel: s
 
         <div className="mt-[0.78em] grid h-[14.4em] grid-cols-[17.8em_17.9em_1fr]">
           <Side
-            name="Offense"
+            name={text.offenseTag ? `Offense [${text.offenseTag}]` : "Offense"}
             label={text.offenseTag ? `OFFENSE [${text.offenseTag}]` : "OFFENSE"}
             lines={text.offense}
             specialResult={text.offenseSpecialResult}

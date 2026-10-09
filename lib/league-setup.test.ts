@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   defaultXpKickDistance,
+  validateGroupName,
   validateLeagueSetup,
+  validateLeagueText,
   type LeagueSetupInput,
 } from "@/lib/league-setup";
 
@@ -192,5 +194,111 @@ describe("validateLeagueSetup", () => {
       "teamCount",
       "structure",
     ]);
+  });
+});
+
+describe("validateLeagueText", () => {
+  it("trims a league name and a season label", () => {
+    expect(validateLeagueText("name", "  Continental  ")).toEqual({
+      ok: true,
+      field: "name",
+      value: "Continental",
+    });
+    expect(validateLeagueText("seasonLabel", " 2016 ")).toEqual({
+      ok: true,
+      field: "seasonLabel",
+      value: "2016",
+    });
+  });
+
+  it("requires text and says what is missing", () => {
+    expect(validateLeagueText("name", "   ")).toEqual({
+      ok: false,
+      error: "League name is required.",
+    });
+    expect(validateLeagueText("seasonLabel", undefined)).toEqual({
+      ok: false,
+      error: "Season label is required.",
+    });
+  });
+
+  it("limits a name to 100 characters and a label to 30", () => {
+    expect(validateLeagueText("name", "x".repeat(100)).ok).toBe(true);
+    expect(validateLeagueText("name", "x".repeat(101))).toEqual({
+      ok: false,
+      error: "League name must be 100 characters or fewer.",
+    });
+    expect(validateLeagueText("seasonLabel", "x".repeat(30)).ok).toBe(true);
+    expect(validateLeagueText("seasonLabel", "x".repeat(31))).toEqual({
+      ok: false,
+      error: "Season label must be 30 characters or fewer.",
+    });
+  });
+
+  it.each(["teamCount", "xpKickDistance", "toString", "", undefined, 7])(
+    "rejects the field %j",
+    (field) => {
+      expect(validateLeagueText(field, "Anything")).toEqual({
+        ok: false,
+        error: "That league could not be found.",
+      });
+    },
+  );
+
+  it("reports the same words as the setup form", () => {
+    const result = validateLeagueSetup(setup({ name: "", seasonLabel: "x".repeat(31) }));
+
+    expect(result).toEqual({
+      ok: false,
+      errors: [
+        { field: "name", message: "League name is required." },
+        { field: "seasonLabel", message: "Season label must be 30 characters or fewer." },
+      ],
+    });
+  });
+});
+
+describe("validateGroupName", () => {
+  it("trims a conference or division name", () => {
+    expect(validateGroupName("conference", "  American ")).toEqual({
+      ok: true,
+      kind: "conference",
+      value: "American",
+    });
+    expect(validateGroupName("division", " East ")).toEqual({
+      ok: true,
+      kind: "division",
+      value: "East",
+    });
+  });
+
+  it("requires a name, in the setup form's words", () => {
+    expect(validateGroupName("conference", "  ")).toEqual({
+      ok: false,
+      error: "Conference name is required.",
+    });
+    expect(validateGroupName("division", undefined)).toEqual({
+      ok: false,
+      error: "Division name is required.",
+    });
+  });
+
+  it("limits a name to 50 characters", () => {
+    expect(validateGroupName("division", "x".repeat(50)).ok).toBe(true);
+    expect(validateGroupName("division", "x".repeat(51))).toEqual({
+      ok: false,
+      error: "Division name must be 50 characters or fewer.",
+    });
+    expect(validateGroupName("conference", "x".repeat(51))).toEqual({
+      ok: false,
+      error: "Conference name must be 50 characters or fewer.",
+    });
+  });
+
+  it.each(["league", "team", "toString", "", undefined])("rejects the kind %j", (kind) => {
+    expect(validateGroupName(kind, "East")).toEqual({
+      ok: false,
+      error: "That group could not be found.",
+    });
   });
 });

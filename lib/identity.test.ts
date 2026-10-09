@@ -239,6 +239,40 @@ describe("validateTeamField", () => {
     });
   });
 
+  it.each(["R", "R+", "P", "P+"])("accepts the offense tag %s", (tag) => {
+    expect(validateTeamField("offenseTag", tag)).toEqual({
+      ok: true,
+      field: "offenseTag",
+      value: tag,
+    });
+  });
+
+  it("trims an offense tag", () => {
+    expect(validateTeamField("offenseTag", "  P+ ")).toEqual({
+      ok: true,
+      field: "offenseTag",
+      value: "P+",
+    });
+  });
+
+  it.each(["", "   "])("treats %j as no offense tag", (value) => {
+    expect(validateTeamField("offenseTag", value)).toEqual({
+      ok: true,
+      field: "offenseTag",
+      value: null,
+    });
+  });
+
+  it.each(["r", "X", "R++", "[R]", "PROLIFIC", undefined, null, 7])(
+    "rejects the offense tag %j",
+    (value) => {
+      expect(validateTeamField("offenseTag", value)).toEqual({
+        ok: false,
+        error: "Choose an offense tag.",
+      });
+    },
+  );
+
   it("rejects an unknown field", () => {
     expect(validateTeamField("colors", "#000000")).toEqual({
       ok: false,

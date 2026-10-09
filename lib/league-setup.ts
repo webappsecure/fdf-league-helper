@@ -43,6 +43,60 @@ export function defaultXpKickDistance(label: string): XpKickDistance {
   return /^\d{4}$/.test(trimmed) && Number(trimmed) >= FIRST_15_YARD_YEAR ? 15 : 2;
 }
 
+type TextCheck = { value: string; error: string | null };
+
+// The one rule for a name typed by hand: trimmed, required, and limited. The
+// setup form and every later edit report it in the same words.
+function checkText(value: unknown, label: string, max: number): TextCheck {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (trimmed === "") return { value: trimmed, error: `${label} is required.` };
+  if (trimmed.length > max) {
+    return { value: trimmed, error: `${label} must be ${max} characters or fewer.` };
+  }
+  return { value: trimmed, error: null };
+}
+
+const LEAGUE_TEXT = {
+  name: { label: "League name", max: LEAGUE_NAME_MAX },
+  seasonLabel: { label: "Season label", max: SEASON_LABEL_MAX },
+} as const;
+
+export type LeagueTextField = keyof typeof LEAGUE_TEXT;
+
+export type LeagueTextValidation =
+  | { ok: true; field: LeagueTextField; value: string }
+  | { ok: false; error: string };
+
+// Accepts untrusted input from a Server Action.
+export function validateLeagueText(field: unknown, value: unknown): LeagueTextValidation {
+  if (typeof field !== "string" || !Object.hasOwn(LEAGUE_TEXT, field)) {
+    return { ok: false, error: "That league could not be found." };
+  }
+  const key = field as LeagueTextField;
+  const { value: text, error } = checkText(value, LEAGUE_TEXT[key].label, LEAGUE_TEXT[key].max);
+  return error === null ? { ok: true, field: key, value: text } : { ok: false, error };
+}
+
+export type GroupKind = "conference" | "division";
+
+export type GroupNameValidation =
+  | { ok: true; kind: GroupKind; value: string }
+  | { ok: false; error: string };
+
+const GROUP_LABELS: Record<GroupKind, string> = {
+  conference: "Conference name",
+  division: "Division name",
+};
+
+// Accepts untrusted input from a Server Action.
+export function validateGroupName(kind: unknown, value: unknown): GroupNameValidation {
+  if (kind !== "conference" && kind !== "division") {
+    return { ok: false, error: "That group could not be found." };
+  }
+  const { value: text, error } = checkText(value, GROUP_LABELS[kind], GROUP_NAME_MAX);
+  return error === null ? { ok: true, kind, value: text } : { ok: false, error };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -53,12 +107,8 @@ export function validateLeagueSetup(input: unknown): ValidationResult {
   const source = isRecord(input) ? input : {};
 
   function text(value: unknown, field: string, label: string, max: number): string {
-    const trimmed = typeof value === "string" ? value.trim() : "";
-    if (trimmed === "") {
-      errors.push({ field, message: `${label} is required.` });
-    } else if (trimmed.length > max) {
-      errors.push({ field, message: `${label} must be ${max} characters or fewer.` });
-    }
+    const { value: trimmed, error } = checkText(value, label, max);
+    if (error !== null) errors.push({ field, message: error });
     return trimmed;
   }
 

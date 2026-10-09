@@ -526,6 +526,22 @@ describe("acceptLeague", () => {
   });
 });
 
+describe("offense tags", () => {
+  it("are kept through generating, re-rolling and accepting", () => {
+    const id = league();
+    updateTeamField(db, listTeams(db, id)[0].id, "offenseTag", "R+");
+    const tags = () => listTeams(db, id).map((team) => team.offenseTag);
+    const expected = ["R+", ...Array<null>(7).fill(null)];
+
+    generateLeague(db, id, 7);
+    expect(tags()).toEqual(expected);
+    rerollLeague(db, id, 8);
+    expect(tags()).toEqual(expected);
+    acceptLeague(db, id);
+    expect(tags()).toEqual(expected);
+  });
+});
+
 describe("getGenerationRun", () => {
   it("returns null before a league is generated and for an unknown league", () => {
     expect(getGenerationRun(db, league())).toBeNull();

@@ -6,6 +6,7 @@ import {
   rerollField,
   type EditField,
   type Identity,
+  type OffenseTag,
   type RerollField,
 } from "@/lib/identity";
 import type {
@@ -22,6 +23,8 @@ export type Team = Identity & {
   franchiseId: number;
   divisionId: number | null;
   position: number;
+  // Set by hand, never generated: a re-roll leaves it alone.
+  offenseTag: OffenseTag | null;
   // Rule-generated. All four are null until the league is generated, and the
   // ownership pair stays null for a team that rolled no quality.
   ownershipStyle: OwnershipStyle | null;
@@ -62,6 +65,7 @@ const TEAM_SELECT = `
          team_season.nickname AS nickname, team_season.head_coach_name AS headCoachName,
          team_season.primary_color AS primaryColor,
          team_season.secondary_color AS secondaryColor,
+         team_season.offense_tag AS offenseTag,
          team_season.ownership_style AS ownershipStyle,
          team_season.ownership_loyalty AS ownershipLoyalty,
          team_season.front_office_grade AS frontOfficeGrade,
@@ -81,6 +85,7 @@ const COLUMNS: Record<EditField, string> = {
   headCoachName: "head_coach_name",
   primaryColor: "primary_color",
   secondaryColor: "secondary_color",
+  offenseTag: "offense_tag",
 };
 
 // Creates a franchise and a team for every slot in the season. The caller owns
@@ -170,7 +175,7 @@ export function updateTeamField(
   db: DatabaseSync,
   teamId: number,
   field: EditField,
-  value: string,
+  value: string | null,
 ): boolean {
   const result = db
     .prepare(`UPDATE team_season SET ${COLUMNS[field]} = ? WHERE id = ?`)

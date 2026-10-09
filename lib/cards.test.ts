@@ -26,6 +26,7 @@ function team(overrides: Partial<CardTeam> = {}): CardTeam {
     headCoachName: "Sean Marsh",
     primaryColor: "#003594",
     secondaryColor: "#c8102e",
+    offenseTag: null,
     ownershipStyle: "SAVVY",
     ownershipLoyalty: "LOYAL",
     frontOfficeGrade: "A",
@@ -103,12 +104,17 @@ describe("cardText", () => {
     expect(cardText(team({ kickReturn: "ELECTRIC" }), "2016").kickReturn).toBe("ELECTRIC");
   });
 
-  it("has no offense tag or special result yet", () => {
+  it("has no special result yet", () => {
     expect(cardText(team(), "2016")).toMatchObject({
-      offenseTag: null,
       offenseSpecialResult: null,
       defenseSpecialResult: null,
     });
+  });
+
+  it("prints the team's offense tag, or none", () => {
+    expect(cardText(team(), "2016").offenseTag).toBeNull();
+    expect(cardText(team({ offenseTag: "R+" }), "2016").offenseTag).toBe("R+");
+    expect(cardText(team({ offenseTag: "P" }), "2016").offenseTag).toBe("P");
   });
 
   it("never carries grades, ownership or a division", () => {

@@ -5,8 +5,14 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { isRerollField, validateTeamField, type CellResult } from "@/lib/identity";
-import type { ActionFailure } from "@/lib/league-setup";
-import { deleteLeague } from "@/lib/leagues";
+import { validateGroupName, validateLeagueText, type ActionFailure } from "@/lib/league-setup";
+import {
+  deleteLeague,
+  renameConference,
+  renameDivision,
+  updateLeagueName,
+  updateSeasonLabel,
+} from "@/lib/leagues";
 import { acceptLeague, generateLeague, rerollLeague } from "@/lib/runs";
 import { fillTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
@@ -28,6 +34,7 @@ function isId(value: unknown): value is number {
 
 function revalidateLeaguePages(): void {
   revalidatePath("/leagues/[leagueId]", "page");
+  revalidatePath("/leagues/[leagueId]/cards", "page");
 }
 
 export async function updateTeamFieldAction(
@@ -41,6 +48,58 @@ export async function updateTeamFieldAction(
 
   try {
     if (!updateTeamField(getDb(), teamId, result.field, result.value)) return TEAM_NOT_FOUND;
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+
+  revalidateLeaguePages();
+  return { success: true };
+}
+
+export async function updateLeagueTextAction(
+  leagueId: number,
+  field: string,
+  value: string,
+): Promise<CellResult> {
+  if (!isId(leagueId)) return LEAGUE_NOT_FOUND;
+  const result = validateLeagueText(field, value);
+  if (!result.ok) return { success: false, error: result.error };
+
+  try {
+    const db = getDb();
+    const found =
+      result.field === "name"
+        ? updateLeagueName(db, leagueId, result.value)
+        : updateSeasonLabel(db, leagueId, result.value);
+    if (!found) return LEAGUE_NOT_FOUND;
+  } catch (error) {
+    console.error(error);
+    return SAVE_FAILED;
+  }
+
+  revalidateLeaguePages();
+  // The league list shows both.
+  revalidatePath("/");
+  return { success: true };
+}
+
+export async function renameGroupAction(
+  kind: string,
+  groupId: number,
+  name: string,
+): Promise<CellResult> {
+  const result = validateGroupName(kind, name);
+  if (!result.ok) return { success: false, error: result.error };
+  if (!isId(groupId)) return { success: false, error: `That ${result.kind} could not be found.` };
+
+  try {
+    const db = getDb();
+    const found =
+      result.kind === "conference"
+        ? renameConference(db, groupId, result.value)
+        : renameDivision(db, groupId, result.value);
+    if (!found) return { success: false, error: `That ${result.kind} could not be found.` };
   } catch (error) {
     console.error(error);
     return SAVE_FAILED;

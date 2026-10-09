@@ -2,7 +2,7 @@ import type { LeagueDetail } from "@/lib/leagues";
 import type { Team } from "@/lib/teams";
 import { ActionButton } from "./action-button";
 import { fillTeamsAction } from "./actions";
-import { ColorsCell, TextCell } from "./identity-cell";
+import { ColorsCell, OffenseTagCell, TextCell } from "./identity-cell";
 import { LeagueGroups } from "./league-groups";
 
 function TeamTable({ caption, teams }: { caption: string; teams: Team[] }) {
@@ -20,8 +20,11 @@ function TeamTable({ caption, teams }: { caption: string; teams: Team[] }) {
           <th scope="col" className="py-1 pr-2 font-medium">
             Head coach
           </th>
-          <th scope="col" className="py-1 font-medium">
+          <th scope="col" className="py-1 pr-2 font-medium">
             Colors
+          </th>
+          <th scope="col" className="py-1 font-medium">
+            Offense tag
           </th>
         </tr>
       </thead>
@@ -49,13 +52,16 @@ function TeamTable({ caption, teams }: { caption: string; teams: Team[] }) {
                   teamName={name}
                 />
               </td>
-              <td className="py-1">
+              <td className="py-1 pr-2">
                 <ColorsCell
                   teamId={team.id}
                   primaryColor={team.primaryColor}
                   secondaryColor={team.secondaryColor}
                   teamName={name}
                 />
+              </td>
+              <td className="py-1">
+                <OffenseTagCell teamId={team.id} value={team.offenseTag} teamName={name} />
               </td>
             </tr>
           );
@@ -87,7 +93,7 @@ export function TeamTables({ league, teams }: { league: LeagueDetail; teams: Tea
           {league.teamCount} teams with no conferences or divisions.
         </p>
       )}
-      <LeagueGroups league={league} teams={teams} showCounts>
+      <LeagueGroups league={league} teams={teams} showCounts editable>
         {(caption, members) => <TeamTable caption={`${caption} teams`} teams={members} />}
       </LeagueGroups>
     </>

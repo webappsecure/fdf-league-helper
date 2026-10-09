@@ -2,13 +2,15 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
 import { getDb } from "@/lib/db";
+import { LEAGUE_NAME_MAX, SEASON_LABEL_MAX } from "@/lib/league-setup";
 import { getLeague } from "@/lib/leagues";
 import { getGenerationRun } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
 import { AcceptLeague } from "./accept-league";
 import { ActionButton } from "./action-button";
-import { generateLeagueAction, rerollLeagueAction } from "./actions";
+import { generateLeagueAction, rerollLeagueAction, updateLeagueTextAction } from "./actions";
 import { DeleteLeague } from "./delete-league";
+import { LeagueTextField } from "./league-text-field";
 import { ManagementTables } from "./management-table";
 import { ProfileTables } from "./profile-table";
 import { RunLog } from "./run-log";
@@ -29,8 +31,24 @@ async function LeagueDetails({ params }: { params: Promise<{ leagueId: string }>
       <h1 className="text-2xl font-semibold">{league.name}</h1>
 
       <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
-        <dt className="text-muted">Season</dt>
-        <dd>{league.seasonLabel}</dd>
+        <dt className="text-muted">League name</dt>
+        <dd>
+          <LeagueTextField
+            action={updateLeagueTextAction.bind(null, league.id, "name")}
+            value={league.name}
+            label="League name"
+            max={LEAGUE_NAME_MAX}
+          />
+        </dd>
+        <dt className="text-muted">Season label</dt>
+        <dd>
+          <LeagueTextField
+            action={updateLeagueTextAction.bind(null, league.id, "seasonLabel")}
+            value={league.seasonLabel}
+            label="Season label"
+            max={SEASON_LABEL_MAX}
+          />
+        </dd>
         <dt className="text-muted">Teams</dt>
         <dd>{league.teamCount}</dd>
         <dt className="text-muted">Extra point kick</dt>
