@@ -32,6 +32,18 @@ const TEAM_NAME_SIZES: Record<TextStep, string> = {
 // offense qualities is one more, and prints smaller.
 const FULL_SIZE_LINES = 6;
 
+// A special result is reserved this much of the 14.4em box (two wrapped lines of
+// the longest Table G text), and the list shrinks to fit the rest.
+const RESULT_EM = 3.3;
+const BOX_EM = 14.4;
+const LINE_HEIGHT = 1.08;
+const FULL_FONT_EM = 2.2;
+
+function listFontEm(lines: number, hasResult: boolean): number {
+  if (!hasResult) return lines > FULL_SIZE_LINES ? 1.88 : FULL_FONT_EM;
+  return Math.min(FULL_FONT_EM, (BOX_EM - RESULT_EM) / (lines * LINE_HEIGHT));
+}
+
 function Side({
   name,
   label,
@@ -54,7 +66,14 @@ function Side({
         </span>
       </div>
       <div className="min-w-0">
-        <ul className={`${lines.length > FULL_SIZE_LINES ? "text-[1.88em]" : "text-[2.2em]"} leading-[1.08]`}>
+        <ul
+          style={
+            {
+              "--list-size": `${listFontEm(lines.length, specialResult !== null)}em`,
+            } as CSSProperties
+          }
+          className="text-(length:--list-size) leading-[1.08]"
+        >
           {lines.map((line) => (
             <li key={line}>{line}</li>
           ))}

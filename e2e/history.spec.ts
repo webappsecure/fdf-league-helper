@@ -169,3 +169,59 @@ test("prints a saved special result on the cards of a later season", async ({ pa
     await expect(page.getByText("Saved offense result")).toHaveCount(2);
   }
 });
+
+// The fullest side (a profile and all six qualities) under the longest Table G text.
+const LONGEST_RESULT = "Rolls 1-2-3, 1-2-5, & 3-4-5 are automatic TD PASS";
+const FULL_QUALITIES = JSON.stringify(
+  ["DYNAMIC", "SOLID", "RELIABLE", "SECURE", "DISCIPLINED", "EFFICIENT"].map((quality) => ({
+    quality,
+    strength: "FULL",
+  })),
+);
+
+test("keeps the longest special result inside the card, on screen and in print", async ({
+  page,
+}) => {
+  const { url } = await acceptedLeague(page, "History Fit");
+  await enterResults(page);
+  await startAndAcceptOffseason(page, url);
+  await acceptOffseason(page);
+
+  const leagueId = Number(new URL(url).pathname.split("/").pop());
+  const db = new DatabaseSync(TEST_DB);
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    db.prepare(
+      `UPDATE team_season SET offense_profile = 'PROLIFIC', offense_qualities = ?,
+         offense_special_result = ?
+       WHERE id = (SELECT MIN(team_season.id) FROM team_season
+                   JOIN season ON season.id = team_season.season_id
+                   WHERE season.league_id = ? AND season.sequence = 2)`,
+    ).run(FULL_QUALITIES, LONGEST_RESULT, leagueId);
+  } finally {
+    db.close();
+  }
+
+  await page.goto(`${url}/cards`);
+  await expect(page.getByRole("article", { name: / card$/ })).toHaveCount(9);
+
+  for (const media of ["screen", "print"] as const) {
+    await page.emulateMedia({ media });
+    const card = page.locator("article:visible", { hasText: LONGEST_RESULT });
+    const result = card.getByText(LONGEST_RESULT);
+    const side = card.getByRole("region", { name: "Offense" });
+    const logo = card.getByRole("img", { name: "Fast Drive Football" });
+    const [resultBox, sideBox, logoBox] = await Promise.all([
+      result.boundingBox(),
+      side.boundingBox(),
+      logo.boundingBox(),
+    ]);
+    expect(resultBox, `${media} result`).not.toBeNull();
+    expect(resultBox!.y + resultBox!.height, `${media} bottom of result`).toBeLessThanOrEqual(
+      sideBox!.y + sideBox!.height + 0.5,
+    );
+    expect(resultBox!.y + resultBox!.height, `${media} result above logo`).toBeLessThanOrEqual(
+      logoBox!.y + 0.5,
+    );
+  }
+});
