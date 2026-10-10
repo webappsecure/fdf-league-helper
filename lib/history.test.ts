@@ -113,6 +113,31 @@ describe("season history", () => {
     expect(getResultsBySeason(db, current.seasonId)).toEqual([]);
   });
 
+  it("carries the saved special results of a season", () => {
+    const id = accepted();
+    enterResults(id);
+    startOffseason(db, id, 1);
+    acceptOffseason(db, id);
+    const season2 = getSeasonLeague(db, id, 2)!.seasonId;
+    expect(listSeasonTeams(db, season2).every((team) => team.offenseSpecialResult === null)).toBe(
+      true,
+    );
+
+    const [team] = listSeasonTeams(db, season2);
+    db.prepare(
+      "UPDATE team_season SET offense_special_result = ?, defense_special_result = ? WHERE id = ?",
+    ).run("Offense result", "Defense result", team.id);
+
+    expect(listSeasonTeams(db, season2)[0]).toMatchObject({
+      offenseSpecialResult: "Offense result",
+      defenseSpecialResult: "Defense result",
+    });
+    expect(listTeams(db, id)[0]).toMatchObject({ offenseSpecialResult: "Offense result" });
+    expect(
+      listSeasonTeams(db, getSeasonLeague(db, id, 1)!.seasonId)[0].offenseSpecialResult,
+    ).toBeNull();
+  });
+
   it("finds nothing for another league's season or an unknown sequence", () => {
     const first = accepted();
     const second = accepted("Other League");

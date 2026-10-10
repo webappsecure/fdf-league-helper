@@ -42,6 +42,9 @@ export type Team = Identity & {
   offenseQualities: Quality[] | null;
   defenseProfile: DefenseProfile | null;
   defenseQualities: DefenseQuality[] | null;
+  // Table G results from an off-season draft; null in the first season.
+  offenseSpecialResult: string | null;
+  defenseSpecialResult: string | null;
   // On a generated team a null return means it has no return quality.
   kickReturn: ReturnQuality | null;
   puntReturn: ReturnQuality | null;
@@ -80,6 +83,8 @@ const TEAM_SELECT = `
          team_season.offense_qualities AS offenseQualities,
          team_season.defense_profile AS defenseProfile,
          team_season.defense_qualities AS defenseQualities,
+         team_season.offense_special_result AS offenseSpecialResult,
+         team_season.defense_special_result AS defenseSpecialResult,
          team_season.kick_return AS kickReturn, team_season.punt_return AS puntReturn,
          team_season.fg_range AS fgRange, team_season.xp_range AS xpRange
   FROM team_season

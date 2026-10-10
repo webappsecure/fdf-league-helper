@@ -42,6 +42,8 @@ function team(overrides: Partial<CardTeam> = {}): CardTeam {
       { quality: "ACTIVE", strength: "SEMI" },
       { quality: "UNDISCIPLINED", strength: "SEMI" },
     ],
+    offenseSpecialResult: null,
+    defenseSpecialResult: null,
     kickReturn: null,
     puntReturn: "ELECTRIC_SEMI",
     fgRange: "11-56",
@@ -104,10 +106,19 @@ describe("cardText", () => {
     expect(cardText(team({ kickReturn: "ELECTRIC" }), "2016").kickReturn).toBe("ELECTRIC");
   });
 
-  it("has no special result yet", () => {
+  it("prints the stored special results, or none", () => {
     expect(cardText(team(), "2016")).toMatchObject({
       offenseSpecialResult: null,
       defenseSpecialResult: null,
+    });
+    expect(
+      cardText(
+        team({ offenseSpecialResult: "Offense result", defenseSpecialResult: "Defense result" }),
+        "2016",
+      ),
+    ).toMatchObject({
+      offenseSpecialResult: "Offense result",
+      defenseSpecialResult: "Defense result",
     });
   });
 

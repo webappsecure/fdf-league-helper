@@ -102,6 +102,8 @@ const team: Team = {
   offenseQualities: null,
   defenseProfile: null,
   defenseQualities: null,
+  offenseSpecialResult: null,
+  defenseSpecialResult: null,
   kickReturn: null,
   puntReturn: null,
   fgRange: null,

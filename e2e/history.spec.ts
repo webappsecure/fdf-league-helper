@@ -1,4 +1,6 @@
+import { DatabaseSync } from "node:sqlite";
 import { expect, test, type Page } from "@playwright/test";
+import { TEST_DB } from "./test-db";
 
 // Specs share one database and run in parallel, so every league name is unique.
 function uniqueName(label: string): string {
@@ -35,8 +37,14 @@ async function enterResults(page: Page): Promise<void> {
       .nth(index)
       .fill("10");
   }
-  await page.getByRole("checkbox", { name: / made playoffs$/ }).nth(6).check();
-  await page.getByRole("checkbox", { name: / made playoffs$/ }).nth(7).check();
+  await page
+    .getByRole("checkbox", { name: / made playoffs$/ })
+    .nth(6)
+    .check();
+  await page
+    .getByRole("checkbox", { name: / made playoffs$/ })
+    .nth(7)
+    .check();
   await page
     .getByRole("radio", { name: / league champion$/ })
     .nth(7)
@@ -92,9 +100,7 @@ test("browses an earlier season after the league moved on", async ({ page }) => 
 
   // Season 1 as it was: label, results, champion, teams and generation log.
   await page.getByRole("link", { name: "Season 1" }).click();
-  await expect(
-    page.getByRole("heading", { level: 1, name: `${name}, Season 1` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: `${name}, Season 1` })).toBeVisible();
   const results = page.getByRole("table", { name: `${name} results` });
   await expect(results.getByRole("row")).toHaveCount(9);
   await expect(results.getByRole("cell", { name: "Champion", exact: true })).toHaveCount(1);
@@ -134,4 +140,32 @@ test("shows not found for a season that does not exist", async ({ page }) => {
   }
   await page.goto(`${url}/seasons/1`);
   await expect(page.getByRole("heading", { level: 2, name: "Results" })).toBeVisible();
+});
+
+test("prints a saved special result on the cards of a later season", async ({ page }) => {
+  const { url } = await acceptedLeague(page, "History Specials");
+  await enterResults(page);
+  await startAndAcceptOffseason(page, url);
+  await acceptOffseason(page);
+
+  const leagueId = Number(new URL(url).pathname.split("/").pop());
+  const db = new DatabaseSync(TEST_DB);
+  try {
+    db.exec("PRAGMA busy_timeout = 5000");
+    db.prepare(
+      `UPDATE team_season SET offense_special_result = 'Saved offense result'
+       WHERE id = (SELECT MIN(team_season.id) FROM team_season
+                   JOIN season ON season.id = team_season.season_id
+                   WHERE season.league_id = ? AND season.sequence = 2)`,
+    ).run(leagueId);
+  } finally {
+    db.close();
+  }
+
+  for (const path of ["/cards", "/seasons/2/cards"]) {
+    await page.goto(`${url}${path}`);
+    await expect(page.getByRole("article", { name: / card$/ })).toHaveCount(9);
+    // Once on the screen card and once on its print sheet copy.
+    await expect(page.getByText("Saved offense result")).toHaveCount(2);
+  }
 });

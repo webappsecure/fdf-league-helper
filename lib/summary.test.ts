@@ -25,6 +25,8 @@ function team(overrides: Partial<Team> = {}): Team {
     ],
     defenseProfile: "AVERAGE",
     defenseQualities: [{ quality: "ACTIVE", strength: "SEMI" }],
+    offenseSpecialResult: null,
+    defenseSpecialResult: null,
     kickReturn: null,
     puntReturn: "ELECTRIC_SEMI",
     fgRange: "11-56",
