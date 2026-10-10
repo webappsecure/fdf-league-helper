@@ -4,22 +4,28 @@ import { openDatabase } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
 import { createLeague } from "@/lib/leagues";
 import { getOffseasonDraft, startOffseason } from "@/lib/offseason";
+import { addExpansionTeam } from "@/lib/offseason-plan";
 import { saveSeasonResults } from "@/lib/results";
 import { acceptLeague, generateLeague } from "@/lib/runs";
 import { listTeams } from "@/lib/teams";
 
 // Training camp steps 7 to 9 are replaced with known results, so the test sees
 // whether each value is saved in its own column.
+const stepInputs = vi.hoisted(() => ({ teams: [] as { previous: unknown }[] }));
+
 vi.mock("@/lib/rules/camp-special-teams", () => ({
-  runCampSpecialTeams: (teams: unknown[]) => ({
-    results: teams.map((_, index) => ({
-      kickReturn: "ELECTRIC",
-      puntReturn: "ELECTRIC_SEMI",
-      fgRange: `11-4${(index % 6) + 1}`,
-      xpRange: `11-5${(index % 6) + 1}`,
-    })),
-    log: [],
-  }),
+  runCampSpecialTeams: (teams: { previous: unknown }[]) => {
+    stepInputs.teams = teams;
+    return {
+      results: teams.map((_, index) => ({
+        kickReturn: "ELECTRIC",
+        puntReturn: "ELECTRIC_SEMI",
+        fgRange: `11-4${(index % 6) + 1}`,
+        xpRange: `11-5${(index % 6) + 1}`,
+      })),
+      log: [],
+    };
+  },
 }));
 vi.mock("@/lib/rules/camp-events", () => ({
   runEvents: (teams: unknown[]) => ({ teams, log: [] }),
@@ -82,5 +88,33 @@ describe("saving training camp steps 7 to 9", () => {
       expect(team.xpRange).toBe(`11-5${(index % 6) + 1}`);
       expect(team.pendingMove).toBe(index === 1);
     });
+  });
+
+  it("gives step 7 each kept team's season-1 special teams, and none for an expansion team", () => {
+    const id = readyLeague();
+    const season1 = listTeams(db, id).map((team, index) => ({
+      id: team.id,
+      kickReturn: index % 2 === 0 ? "ELECTRIC" : null,
+      puntReturn: index % 2 === 0 ? "ELECTRIC_SEMI" : "ELECTRIC",
+      fgRange: `11-3${index + 1}`,
+      xpRange: `11-2${index + 1}`,
+    }));
+    for (const team of season1) {
+      db.prepare(
+        "UPDATE team_season SET kick_return = ?, punt_return = ?, fg_range = ?, xp_range = ? WHERE id = ?",
+      ).run(team.kickReturn, team.puntReturn, team.fgRange, team.xpRange, team.id);
+    }
+    expect(addExpansionTeam(db, id, null, Math.random)).toEqual({ ok: true });
+    startOffseason(db, id, 5);
+
+    expect(stepInputs.teams.map((team) => team.previous)).toEqual([
+      ...season1.map(({ kickReturn, puntReturn, fgRange, xpRange }) => ({
+        kickReturn,
+        puntReturn,
+        fgRange,
+        xpRange,
+      })),
+      null,
+    ]);
   });
 });
