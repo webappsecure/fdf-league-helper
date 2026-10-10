@@ -166,3 +166,52 @@ test("applies an expansion team and a contraction to the draft", async ({ page }
   // The plan is locked: its page shows the draft, not the plan controls.
   await expect(page.getByRole("button", { name: "Add expansion team" })).toHaveCount(0);
 });
+
+test("accepts the off-season and the next season becomes the league's season", async ({ page }) => {
+  const url = await acceptedLeague(page, "Offseason Accept");
+  await enterResults(page);
+  await openOffseason(page, url);
+  await page.getByRole("button", { name: "Add expansion team" }).click();
+  await expect(page.getByRole("status")).toHaveText("Planned teams: 9 (8 now, 1 new, 0 leaving)");
+  await page.getByRole("button", { name: "Start off-season" }).click();
+  await expect(
+    page.getByRole("heading", { level: 2, name: /^Off-season draft for / }),
+  ).toBeVisible();
+
+  // Cancelling the dialog changes nothing.
+  await page.getByRole("button", { name: "Accept off-season" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Accept Season 2?" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Cancel" })).toBeFocused();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(page.getByRole("button", { name: "Accept off-season" })).toBeFocused();
+  await page.goto(url);
+  await expect(page.getByRole("textbox", { name: "Season label", exact: true })).toHaveValue(
+    "Season 1",
+  );
+
+  // Accepting makes the draft the season.
+  await page.goto(`${url}/offseason`);
+  await page.getByRole("button", { name: "Accept off-season" }).click();
+  await dialog.getByRole("button", { name: "Accept off-season" }).click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Expansion and contraction" }),
+  ).toBeVisible();
+  await expect(page.getByRole("status")).toHaveText("Planned teams: 9 (9 now, 0 new, 0 leaving)");
+
+  await page.goto(url);
+  await expect(page.getByRole("textbox", { name: "Season label", exact: true })).toHaveValue(
+    "Season 2",
+  );
+  await expect(page.getByRole("heading", { level: 2, name: "Accepted" })).toBeVisible();
+  await expect(
+    page.getByText("Teams", { exact: true }).locator("xpath=following-sibling::dd[1]"),
+  ).toHaveText("9");
+  await page.getByRole("link", { name: "Detailed", exact: true }).click();
+  await expect(page.getByRole("heading", { level: 2, name: "Off-season log" })).toBeVisible();
+
+  // The new season takes its own results.
+  await page.goto(`${url}/results`);
+  await expect(page.getByRole("textbox", { name: / wins$/ })).toHaveCount(9);
+  await expect(page.getByRole("textbox", { name: / wins$/ }).first()).toHaveValue("");
+});

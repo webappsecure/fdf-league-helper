@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import { hasLaterSeason } from "@/lib/offseason-plan";
 
@@ -140,7 +141,7 @@ type SeasonRow = { seasonId: number; status: string };
 function findSeason(db: DatabaseSync, leagueId: number): SeasonRow | undefined {
   return db
     .prepare(
-      "SELECT id AS seasonId, status FROM season WHERE league_id = ? AND sequence = 1",
+      `SELECT id AS seasonId, status FROM season WHERE league_id = ? AND ${CURRENT_SEASON}`,
     )
     .get(leagueId) as SeasonRow | undefined;
 }
@@ -154,7 +155,7 @@ export function getSeasonResults(db: DatabaseSync, leagueId: number): TeamResult
        FROM season_result
        JOIN team_season ON team_season.id = season_result.team_season_id
        JOIN season ON season.id = team_season.season_id
-       WHERE season.league_id = ? AND season.sequence = 1
+       WHERE season.league_id = ? AND ${CURRENT_SEASON}
        ORDER BY team_season.position`,
     )
     .all(leagueId) as (Omit<TeamResult, "madePlayoffs" | "isChampion"> & {

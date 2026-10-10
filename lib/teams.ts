@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON, currentSeasonId } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import {
@@ -144,17 +145,15 @@ export function insertTeams(
 // is 0 when the league is unknown or already has teams.
 export function fillTeams(db: DatabaseSync, leagueId: number, rng: Rng): number {
   return transaction(db, () => {
-    const season = db
-      .prepare("SELECT id FROM season WHERE league_id = ? AND sequence = 1")
-      .get(leagueId) as { id: number } | undefined;
-    if (!season) return 0;
+    const seasonId = currentSeasonId(db, leagueId);
+    if (seasonId === undefined) return 0;
 
     const { total } = db
       .prepare("SELECT COUNT(*) AS total FROM team_season WHERE season_id = ?")
-      .get(season.id) as { total: number };
+      .get(seasonId) as { total: number };
     if (total > 0) return 0;
 
-    return insertTeams(db, leagueId, season.id, rng);
+    return insertTeams(db, leagueId, seasonId, rng);
   });
 }
 
@@ -163,7 +162,7 @@ export function listTeams(db: DatabaseSync, leagueId: number): Team[] {
     .prepare(
       `${TEAM_SELECT}
        JOIN season ON season.id = team_season.season_id
-       WHERE season.league_id = ? AND season.sequence = 1
+       WHERE season.league_id = ? AND ${CURRENT_SEASON}
        ORDER BY team_season.position`,
     )
     .all(leagueId) as TeamRow[];

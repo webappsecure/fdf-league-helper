@@ -14,6 +14,7 @@ import {
   updateSeasonLabel,
 } from "@/lib/leagues";
 import {
+  acceptOffseason,
   discardOffseason,
   rerollOffseason,
   startOffseason,
@@ -383,4 +384,8 @@ export async function rerollOffseasonAction(leagueId: number): Promise<CellResul
 
 export async function discardOffseasonAction(leagueId: number): Promise<CellResult> {
   return runOffseason(leagueId, () => discardOffseason(getDb(), leagueId));
+}
+
+export async function acceptOffseasonAction(leagueId: number): Promise<CellResult> {
+  return runOffseason(leagueId, () => acceptOffseason(getDb(), leagueId));
 }

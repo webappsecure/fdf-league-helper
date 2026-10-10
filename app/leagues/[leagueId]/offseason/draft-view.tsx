@@ -1,17 +1,11 @@
-import type { OffseasonDraft } from "@/lib/offseason";
+import { OFFSEASON_STEPS, OFFSEASON_STEP_HEADINGS, type OffseasonDraft } from "@/lib/offseason";
 import { DEFENSE_PROFILE_LABELS } from "@/lib/reference/defense-tables";
 import { PROFILE_LABELS } from "@/lib/reference/offense-tables";
 import { listedText } from "@/lib/cards";
-import { ANNUAL_STEPS, ANNUAL_STEP_HEADINGS } from "@/lib/rules/annual-draft";
-import { COACH_STEPS, COACH_STEP_HEADINGS } from "@/lib/rules/coaches";
-import { CAMP_STEPS, CAMP_STEP_HEADINGS } from "@/lib/rules/training-camp";
 import { rerollOffseasonAction } from "../actions";
 import { ActionButton } from "../action-button";
 import { RunLog } from "../run-log";
-import { DiscardOffseason } from "./offseason-actions";
-
-const STEPS = [...COACH_STEPS, ...ANNUAL_STEPS, ...CAMP_STEPS];
-const HEADINGS = { ...COACH_STEP_HEADINGS, ...ANNUAL_STEP_HEADINGS, ...CAMP_STEP_HEADINGS };
+import { AcceptOffseason, DiscardOffseason } from "./offseason-actions";
 
 const PROFILE_COLUMNS = ["Team", "Offense", "Defense"];
 
@@ -41,7 +35,8 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
       </h2>
       <p className="mt-1 text-muted">
         The coaches, profiles, qualities, special teams and training camp events are rolled. Re-roll
-        to run it again from the same plan.
+        to run it again from the same plan, or accept it to make {draft.seasonLabel} the
+        league&apos;s season.
       </p>
       <div className="flex flex-wrap gap-3">
         <ActionButton
@@ -49,6 +44,7 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
           label="Re-roll off-season"
           pendingLabel="Re-rolling..."
         />
+        <AcceptOffseason leagueId={leagueId} seasonLabel={draft.seasonLabel} />
         <DiscardOffseason leagueId={leagueId} />
       </div>
 
@@ -155,7 +151,7 @@ export function DraftView({ leagueId, draft }: { leagueId: number; draft: Offsea
       </div>
 
       <h3 className="mt-6 text-lg font-semibold">Run log</h3>
-      <RunLog entries={draft.log} steps={STEPS} headings={HEADINGS} />
+      <RunLog entries={draft.log} steps={OFFSEASON_STEPS} headings={OFFSEASON_STEP_HEADINGS} />
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { seededRng } from "@/lib/dice";
 import type { LeagueStructure } from "@/lib/league-setup";
 import { createLeague, deleteLeague, getLeague, listLeagues } from "@/lib/leagues";
 import {
+  acceptOffseason,
   discardOffseason,
   getOffseasonDraft,
   nextSeasonLabel,
@@ -554,5 +555,94 @@ describe("locks while a draft exists", () => {
     startOffseason(db, id, 1);
     const outcome = saveSeasonResults(db, id, { teams: [], championTeamId: null });
     expect(outcome).toEqual({ ok: false, reason: "offseason-started" });
+  });
+});
+
+describe("accepting the off-season", () => {
+  // A league of 8 with one team out and one new, in the draft.
+  function draftWithOneOutAndOneIn() {
+    const id = readyLeague();
+    const [leaving] = listTeams(db, id);
+    expect(addExpansionTeam(db, id, null, seededRng(3))).toEqual({ ok: true });
+    expect(setTeamRemoval(db, leaving.id, true)).toEqual({ ok: true });
+    expect(startOffseason(db, id, 1)).toEqual({ ok: true });
+    return { id, leaving };
+  }
+
+  it("makes the draft the current season everywhere the app reads it", () => {
+    const { id } = draftWithOneOutAndOneIn();
+    const draft = getOffseasonDraft(db, id)!;
+    expect(listLeagues(db)[0].seasonLabel).toBe("Season 1");
+
+    expect(acceptOffseason(db, id)).toEqual({ ok: true });
+
+    expect(listLeagues(db)[0]).toMatchObject({ seasonLabel: draft.seasonLabel, teamCount: 8 });
+    expect(getLeague(db, id)).toMatchObject({ status: "accepted", seasonLabel: "Season 2" });
+    expect(listTeams(db, id).map((team) => team.franchiseId)).toEqual(
+      draft.teams.map((team) => team.franchiseId),
+    );
+    expect(getOffseasonDraft(db, id)).toBeNull();
+    expect(db.prepare("SELECT sequence, status FROM season ORDER BY sequence").all()).toEqual([
+      { sequence: 1, status: "accepted" },
+      { sequence: 2, status: "accepted" },
+    ]);
+  });
+
+  it("deactivates only the contracted franchise and leaves last season as it was", () => {
+    const { id, leaving } = draftWithOneOutAndOneIn();
+    const oldRows = db.prepare("SELECT * FROM team_season WHERE season_id = 1 ORDER BY id").all();
+
+    acceptOffseason(db, id);
+
+    const inactive = db.prepare("SELECT id FROM franchise WHERE active = 0").all();
+    expect(inactive).toEqual([{ id: leaving.franchiseId }]);
+    expect(count("SELECT COUNT(*) AS total FROM franchise WHERE active = 1")).toBe(8);
+    expect(db.prepare("SELECT * FROM team_season WHERE season_id = 1 ORDER BY id").all()).toEqual(
+      oldRows,
+    );
+  });
+
+  it("keeps the run and the saved pending moves of the draft", () => {
+    const { id } = draftWithOneOutAndOneIn();
+    const moves = () =>
+      db.prepare("SELECT pending_move FROM team_season WHERE season_id = 2 ORDER BY id").all();
+    const before = moves();
+
+    acceptOffseason(db, id);
+
+    expect(moves()).toEqual(before);
+    expect(count("SELECT COUNT(*) AS total FROM run WHERE kind = 'offseason'")).toBe(1);
+  });
+
+  it("refuses anything once accepted, and when there is nothing to accept", () => {
+    const { id } = draftWithOneOutAndOneIn();
+    acceptOffseason(db, id);
+
+    const none = { ok: false, reason: "not-started" };
+    expect(acceptOffseason(db, id)).toEqual(none);
+    expect(discardOffseason(db, id)).toEqual(none);
+    expect(rerollOffseason(db, id, 2)).toEqual(none);
+
+    expect(acceptOffseason(db, 9999)).toEqual({ ok: false, reason: "not-found" });
+    expect(acceptOffseason(db, readyLeague())).toEqual(none);
+  });
+
+  it("refuses a league that is not accepted", () => {
+    const id = league();
+    db.prepare("UPDATE season SET status = 'draft'").run();
+    expect(acceptOffseason(db, id)).toEqual({ ok: false, reason: "not-accepted" });
+  });
+
+  it("lets the next season take results and run another off-season", () => {
+    const { id } = draftWithOneOutAndOneIn();
+    acceptOffseason(db, id);
+
+    expect(startOffseason(db, id, 4)).toEqual({ ok: false, reason: "results-missing" });
+    enterResults(id);
+    expect(startOffseason(db, id, 4)).toEqual({ ok: true });
+
+    expect(getOffseasonDraft(db, id)!.seasonLabel).toBe("Season 3");
+    expect(count("SELECT MAX(sequence) AS total FROM season")).toBe(3);
+    expect(listLeagues(db)[0].seasonLabel).toBe("Season 2");
   });
 });

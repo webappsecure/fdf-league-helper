@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON, currentSeasonId } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import type { DivisionInput, LeagueSetupInput, XpKickDistance } from "@/lib/league-setup";
@@ -80,7 +81,7 @@ const SUMMARY_SELECT = `
          season.label AS seasonLabel, season.team_count AS teamCount,
          season.xp_kick_distance AS xpKickDistance, season.status AS status
   FROM league
-  JOIN season ON season.league_id = league.id AND season.sequence = 1
+  JOIN season ON season.league_id = league.id AND ${CURRENT_SEASON}
 `;
 
 type SummaryRow = LeagueSummary & {
@@ -144,9 +145,9 @@ export function updateLeagueName(db: DatabaseSync, leagueId: number, name: strin
 }
 
 export function updateSeasonLabel(db: DatabaseSync, leagueId: number, label: string): boolean {
-  const result = db
-    .prepare("UPDATE season SET label = ? WHERE league_id = ? AND sequence = 1")
-    .run(label, leagueId);
+  const seasonId = currentSeasonId(db, leagueId);
+  if (seasonId === undefined) return false;
+  const result = db.prepare("UPDATE season SET label = ? WHERE id = ?").run(label, seasonId);
   return Number(result.changes) > 0;
 }
 

@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
 import type { XpKickDistance } from "@/lib/league-setup";
@@ -19,8 +20,11 @@ export type AcceptResult =
 
 export type RunLogLine = GenerationLogEntry;
 
+// The run that made the current season: the inaugural generation, or the
+// off-season that created it.
 export type GenerationRun = {
   id: number;
+  kind: "generation" | "offseason";
   seed: number;
   createdAt: string;
   entries: RunLogLine[];
@@ -162,10 +166,10 @@ export function acceptLeague(db: DatabaseSync, leagueId: number): AcceptResult {
 export function getGenerationRun(db: DatabaseSync, leagueId: number): GenerationRun | null {
   const run = db
     .prepare(
-      `SELECT run.id AS id, run.seed AS seed, run.created_at AS createdAt
+      `SELECT run.id AS id, run.kind AS kind, run.seed AS seed, run.created_at AS createdAt
        FROM run
        JOIN season ON season.id = run.season_id
-       WHERE season.league_id = ? AND season.sequence = 1 AND run.kind = 'generation'
+       WHERE season.league_id = ? AND ${CURRENT_SEASON}
        ORDER BY run.id DESC LIMIT 1`,
     )
     .get(leagueId) as Omit<GenerationRun, "entries"> | undefined;

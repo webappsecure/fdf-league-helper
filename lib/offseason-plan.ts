@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import { pickCity, rollIdentity, type Identity } from "@/lib/identity";
@@ -49,7 +50,7 @@ type SeasonRow = { id: number; status: string };
 
 function findSeason(db: DatabaseSync, leagueId: number): SeasonRow | undefined {
   return db
-    .prepare("SELECT id, status FROM season WHERE league_id = ? AND sequence = 1")
+    .prepare(`SELECT id, status FROM season WHERE league_id = ? AND ${CURRENT_SEASON}`)
     .get(leagueId) as SeasonRow | undefined;
 }
 

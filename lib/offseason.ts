@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { CURRENT_SEASON } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import { seededRng, type Rng } from "@/lib/dice";
 import {
@@ -14,10 +15,28 @@ import type { ReturnQuality } from "@/lib/reference/special-teams-tables";
 import type { XpKickDistance } from "@/lib/league-setup";
 import { runCampSpecialTeams } from "@/lib/rules/camp-special-teams";
 import { runEvents, runSaleOrMove, type EventTeam } from "@/lib/rules/camp-events";
-import { runAnnualDraft, type AnnualLogEntry, type AnnualTeam } from "@/lib/rules/annual-draft";
+import {
+  ANNUAL_STEPS,
+  ANNUAL_STEP_HEADINGS,
+  runAnnualDraft,
+  type AnnualLogEntry,
+  type AnnualTeam,
+} from "@/lib/rules/annual-draft";
 import type { SpecialTeams } from "@/lib/rules/draft";
-import { runCoaches, type CoachInput, type CoachLogEntry } from "@/lib/rules/coaches";
-import { runTrainingCamp, type CampLogEntry, type CampTeam } from "@/lib/rules/training-camp";
+import {
+  COACH_STEPS,
+  COACH_STEP_HEADINGS,
+  runCoaches,
+  type CoachInput,
+  type CoachLogEntry,
+} from "@/lib/rules/coaches";
+import {
+  CAMP_STEPS,
+  CAMP_STEP_HEADINGS,
+  runTrainingCamp,
+  type CampLogEntry,
+  type CampTeam,
+} from "@/lib/rules/training-camp";
 
 export type OffseasonFailure =
   | "not-found"
@@ -26,6 +45,14 @@ export type OffseasonFailure =
   | "already-started"
   | "not-started"
   | Extract<PlanFailure, "too-many" | "too-few" | "division-empty">;
+
+// The log steps of an off-season run in order, with the heading of each.
+export const OFFSEASON_STEPS = [...COACH_STEPS, ...ANNUAL_STEPS, ...CAMP_STEPS];
+export const OFFSEASON_STEP_HEADINGS: Record<string, string> = {
+  ...COACH_STEP_HEADINGS,
+  ...ANNUAL_STEP_HEADINGS,
+  ...CAMP_STEP_HEADINGS,
+};
 
 // A line of the off-season log: the coach steps, the annual draft, then
 // training camp.
@@ -63,7 +90,7 @@ function findSeason(db: DatabaseSync, leagueId: number): SeasonRow | undefined {
   return db
     .prepare(
       `SELECT id, status, label, sequence, xp_kick_distance AS xpKickDistance
-       FROM season WHERE league_id = ? AND sequence = 1`,
+       FROM season WHERE league_id = ? AND ${CURRENT_SEASON}`,
     )
     .get(leagueId) as SeasonRow | undefined;
 }
@@ -598,6 +625,23 @@ export function discardOffseason(db: DatabaseSync, leagueId: number): OffseasonR
     const draftId = findDraftId(db, leagueId);
     if (draftId === undefined) throw new Refusal("not-started");
     deleteDraft(db, draftId);
+  });
+}
+
+// Makes the off-season draft the league's current season. A franchise that
+// played the season before but has no team in the draft is contracted: it becomes
+// inactive. The draft's rows and log are kept as they were. This cannot be undone.
+export function acceptOffseason(db: DatabaseSync, leagueId: number): OffseasonResult {
+  return attempt(db, () => {
+    const season = requireAccepted(findSeason(db, leagueId));
+    const draftId = findDraftId(db, leagueId);
+    if (draftId === undefined) throw new Refusal("not-started");
+    db.prepare("UPDATE season SET status = 'accepted' WHERE id = ?").run(draftId);
+    db.prepare(
+      `UPDATE franchise SET active = 0
+       WHERE id IN (SELECT franchise_id FROM team_season WHERE season_id = ?1)
+         AND id NOT IN (SELECT franchise_id FROM team_season WHERE season_id = ?2)`,
+    ).run(season.id, draftId);
   });
 }
 

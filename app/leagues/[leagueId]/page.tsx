@@ -4,6 +4,7 @@ import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { LEAGUE_NAME_MAX, SEASON_LABEL_MAX } from "@/lib/league-setup";
 import { getLeague } from "@/lib/leagues";
+import { OFFSEASON_STEPS, OFFSEASON_STEP_HEADINGS } from "@/lib/offseason";
 import { getSeasonResults } from "@/lib/results";
 import { getGenerationRun } from "@/lib/runs";
 import { resolveView, type LeagueView } from "@/lib/summary";
@@ -200,8 +201,21 @@ async function LeagueDetails({
             </>
           )}
           <section className="mt-8">
-            <h2 className="text-lg font-semibold">Generation log</h2>
-            <RunLog entries={run.entries} />
+            {run.kind === "offseason" ? (
+              <>
+                <h2 className="text-lg font-semibold">Off-season log</h2>
+                <RunLog
+                  entries={run.entries}
+                  steps={OFFSEASON_STEPS}
+                  headings={OFFSEASON_STEP_HEADINGS}
+                />
+              </>
+            ) : (
+              <>
+                <h2 className="text-lg font-semibold">Generation log</h2>
+                <RunLog entries={run.entries} />
+              </>
+            )}
           </section>
         </>
       )}
