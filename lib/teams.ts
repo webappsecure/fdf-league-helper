@@ -1,5 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
-import { CURRENT_SEASON, currentSeasonId } from "@/lib/current-season";
+import {
+  CURRENT_SEASON,
+  CURRENT_SEASON_IDS,
+  currentSeasonId,
+  isCurrentSeason,
+} from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import {
@@ -169,7 +174,8 @@ export function listTeams(db: DatabaseSync, leagueId: number): Team[] {
   return rows.map(toTeam);
 }
 
-// Returns false when the team does not exist.
+// Returns false when the team does not exist or is not in its league's current
+// season: past seasons and drafts are read-only.
 export function updateTeamField(
   db: DatabaseSync,
   teamId: number,
@@ -177,7 +183,10 @@ export function updateTeamField(
   value: string | null,
 ): boolean {
   const result = db
-    .prepare(`UPDATE team_season SET ${COLUMNS[field]} = ? WHERE id = ?`)
+    .prepare(
+      `UPDATE team_season SET ${COLUMNS[field]} = ?
+       WHERE id = ? AND season_id IN (${CURRENT_SEASON_IDS})`,
+    )
     .run(value, teamId);
   return Number(result.changes) > 0;
 }
@@ -194,7 +203,7 @@ export function rerollTeamField(
     const row = db
       .prepare("SELECT season_id AS seasonId FROM team_season WHERE id = ?")
       .get(teamId) as { seasonId: number } | undefined;
-    if (!row) return null;
+    if (!row || !isCurrentSeason(db, row.seasonId)) return null;
 
     const rows = db
       .prepare(`${TEAM_SELECT} WHERE team_season.season_id = ?`)

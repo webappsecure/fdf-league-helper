@@ -22,7 +22,7 @@ export type RunLogLine = GenerationLogEntry;
 
 // The run that made the current season: the inaugural generation, or the
 // off-season that created it.
-export type GenerationRun = {
+export type SeasonRun = {
   id: number;
   kind: "generation" | "offseason";
   seed: number;
@@ -163,7 +163,7 @@ export function acceptLeague(db: DatabaseSync, leagueId: number): AcceptResult {
   });
 }
 
-export function getGenerationRun(db: DatabaseSync, leagueId: number): GenerationRun | null {
+export function getSeasonRun(db: DatabaseSync, leagueId: number): SeasonRun | null {
   const run = db
     .prepare(
       `SELECT run.id AS id, run.kind AS kind, run.seed AS seed, run.created_at AS createdAt
@@ -172,7 +172,7 @@ export function getGenerationRun(db: DatabaseSync, leagueId: number): Generation
        WHERE season.league_id = ? AND ${CURRENT_SEASON}
        ORDER BY run.id DESC LIMIT 1`,
     )
-    .get(leagueId) as Omit<GenerationRun, "entries"> | undefined;
+    .get(leagueId) as Omit<SeasonRun, "entries"> | undefined;
   if (!run) return null;
 
   const entries = db

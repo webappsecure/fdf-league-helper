@@ -9,7 +9,7 @@ import { DEFENSE_PAIRS } from "@/lib/reference/defense-tables";
 import { OFFENSE_PAIRS } from "@/lib/reference/offense-tables";
 import { pairIndexIn } from "@/lib/reference/profile-tables";
 import { GENERATION_STEPS } from "@/lib/rules/generation";
-import { acceptLeague, generateLeague, getGenerationRun, rerollLeague } from "@/lib/runs";
+import { acceptLeague, generateLeague, getSeasonRun, rerollLeague } from "@/lib/runs";
 import { listTeams, updateTeamField } from "@/lib/teams";
 
 let db: DatabaseSync;
@@ -79,12 +79,12 @@ function snapshot(leagueId: number) {
   return {
     status: status(leagueId),
     teams: listTeams(db, leagueId),
-    run: getGenerationRun(db, leagueId),
+    run: getSeasonRun(db, leagueId),
   };
 }
 
 function messages(leagueId: number): string[] {
-  return getGenerationRun(db, leagueId)!.entries.map((entry) => entry.message);
+  return getSeasonRun(db, leagueId)!.entries.map((entry) => entry.message);
 }
 
 describe("generateLeague", () => {
@@ -94,7 +94,7 @@ describe("generateLeague", () => {
     const result = generateLeague(db, id, 4242);
 
     expect(result.ok).toBe(true);
-    const run = getGenerationRun(db, id)!;
+    const run = getSeasonRun(db, id)!;
     expect(result).toEqual({ ok: true, runId: run.id });
     expect(run.seed).toBe(4242);
     expect(new Date(run.createdAt).toISOString()).toBe(run.createdAt);
@@ -150,7 +150,7 @@ describe("generateLeague", () => {
     );
     expect(efficiency).toHaveLength(8);
 
-    const entries = getGenerationRun(db, id)!.entries;
+    const entries = getSeasonRun(db, id)!.entries;
     expect([...new Set(entries.map((entry) => entry.step))]).toEqual([...GENERATION_STEPS]);
     expect(entries[40]).toEqual({
       step: "qv-cdv",
@@ -185,7 +185,7 @@ describe("generateLeague", () => {
     expect(teams.filter((team) => team.defenseProfile === "STAUNCH_SEMI")).toHaveLength(1);
 
     // Each team's four first rolls are logged in team order.
-    const rolls = getGenerationRun(db, id)!.entries.filter(
+    const rolls = getSeasonRun(db, id)!.entries.filter(
       (entry) => entry.step === "special-teams" && entry.message.includes("Kickoff return roll"),
     );
     expect(rolls.map((entry) => entry.franchiseId)).toEqual(teams.map((team) => team.franchiseId));
@@ -251,7 +251,7 @@ describe("generateLeague", () => {
     generateLeague(db, id, 7);
 
     const [team] = listTeams(db, id);
-    const lines = getGenerationRun(db, id)!
+    const lines = getSeasonRun(db, id)!
       .entries.slice(0, 32)
       .filter((entry) => entry.franchiseId === team.franchiseId)
       .map((entry) => entry.message);
@@ -279,8 +279,8 @@ describe("generateLeague", () => {
     expect(management(second)).toEqual(management(first));
     expect(offense(second)).toEqual(offense(first));
     expect(drafted(second)).toEqual(drafted(first));
-    expect(getGenerationRun(db, second)!.entries.map((entry) => entry.message)).toEqual(
-      getGenerationRun(db, first)!.entries.map((entry) => entry.message),
+    expect(getSeasonRun(db, second)!.entries.map((entry) => entry.message)).toEqual(
+      getSeasonRun(db, first)!.entries.map((entry) => entry.message),
     );
     expect(management(third)).not.toEqual(management(first));
   });
@@ -288,11 +288,11 @@ describe("generateLeague", () => {
   it("refuses to generate a league twice and changes nothing", () => {
     const id = league();
     generateLeague(db, id, 1);
-    const before = { teams: listTeams(db, id), run: getGenerationRun(db, id) };
+    const before = { teams: listTeams(db, id), run: getSeasonRun(db, id) };
 
     expect(generateLeague(db, id, 2)).toEqual({ ok: false, reason: "already-generated" });
 
-    expect({ teams: listTeams(db, id), run: getGenerationRun(db, id) }).toEqual(before);
+    expect({ teams: listTeams(db, id), run: getSeasonRun(db, id) }).toEqual(before);
     expect(count("run")).toBe(1);
   });
 
@@ -318,7 +318,7 @@ describe("generateLeague", () => {
     generateLeague(db, generated, 1);
 
     expect(status(untouched)).toBe("setup");
-    expect(getGenerationRun(db, untouched)).toBeNull();
+    expect(getSeasonRun(db, untouched)).toBeNull();
     expect(management(untouched).flat().every((value) => value === null)).toBe(true);
     expect(offense(untouched).flat().every((value) => value === null)).toBe(true);
     expect(drafted(untouched).flat().every((value) => value === null)).toBe(true);
@@ -334,7 +334,7 @@ describe("rerollLeague", () => {
 
     const result = rerollLeague(db, id, 2);
 
-    const run = getGenerationRun(db, id)!;
+    const run = getSeasonRun(db, id)!;
     expect(result).toEqual({ ok: true, runId: run.id });
     expect(run.id).not.toBe(before.run!.id);
     expect(run.seed).toBe(2);
@@ -368,7 +368,7 @@ describe("rerollLeague", () => {
     for (const seed of [2, 3, 4]) {
       expect(rerollLeague(db, id, seed).ok).toBe(true);
       expect(count("run")).toBe(1);
-      expect(getGenerationRun(db, id)!.seed).toBe(seed);
+      expect(getSeasonRun(db, id)!.seed).toBe(seed);
     }
     expect(status(id)).toBe("draft");
   });
@@ -426,11 +426,11 @@ describe("rerollLeague", () => {
     const id = league();
     generateLeague(db, id, 1);
     db.exec("DELETE FROM team_season; DELETE FROM franchise;");
-    const run = getGenerationRun(db, id)!;
+    const run = getSeasonRun(db, id)!;
 
     expect(rerollLeague(db, id, 2)).toEqual({ ok: false, reason: "no-teams" });
 
-    expect(getGenerationRun(db, id)).toEqual(run);
+    expect(getSeasonRun(db, id)).toEqual(run);
     expect(count("run")).toBe(1);
   });
 
@@ -542,10 +542,10 @@ describe("offense tags", () => {
   });
 });
 
-describe("getGenerationRun", () => {
+describe("getSeasonRun", () => {
   it("returns null before a league is generated and for an unknown league", () => {
-    expect(getGenerationRun(db, league())).toBeNull();
-    expect(getGenerationRun(db, 999)).toBeNull();
+    expect(getSeasonRun(db, league())).toBeNull();
+    expect(getSeasonRun(db, 999)).toBeNull();
   });
 });
 
@@ -558,8 +558,8 @@ describe("deleting a generated league", () => {
 
     deleteLeague(db, doomed);
 
-    expect(getGenerationRun(db, doomed)).toBeNull();
-    const keptEntries = getGenerationRun(db, kept)!.entries.length;
+    expect(getSeasonRun(db, doomed)).toBeNull();
+    const keptEntries = getSeasonRun(db, kept)!.entries.length;
     expect(keptEntries).toBeGreaterThan(32);
     expect([count("run"), count("run_log_entry")]).toEqual([1, keptEntries]);
   });

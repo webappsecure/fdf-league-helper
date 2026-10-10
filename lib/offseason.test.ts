@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { openDatabase } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
 import type { LeagueStructure } from "@/lib/league-setup";
-import { createLeague, deleteLeague, getLeague, listLeagues } from "@/lib/leagues";
+import {
+  createLeague,
+  deleteLeague,
+  getLeague,
+  listLeagues,
+  renameConference,
+  renameDivision,
+} from "@/lib/leagues";
 import {
   acceptOffseason,
   discardOffseason,
@@ -21,7 +28,7 @@ import {
 } from "@/lib/offseason-plan";
 import { saveSeasonResults } from "@/lib/results";
 import { acceptLeague, generateLeague } from "@/lib/runs";
-import { listTeams } from "@/lib/teams";
+import { listTeams, rerollTeamField, updateTeamField } from "@/lib/teams";
 
 let db: DatabaseSync;
 
@@ -644,5 +651,77 @@ describe("accepting the off-season", () => {
     expect(getOffseasonDraft(db, id)!.seasonLabel).toBe("Season 3");
     expect(count("SELECT MAX(sequence) AS total FROM season")).toBe(3);
     expect(listLeagues(db)[0].seasonLabel).toBe("Season 2");
+  });
+});
+
+describe("past seasons and drafts are read-only", () => {
+  const CONFERENCES: LeagueStructure = {
+    kind: "conferences",
+    conferences: [
+      {
+        name: "North",
+        divisions: [
+          { name: "East", teamCount: 4 },
+          { name: "West", teamCount: 4 },
+        ],
+      },
+    ],
+  };
+
+  function groupIds(seasonId: number) {
+    const conference = db.prepare("SELECT id FROM conference WHERE season_id = ?").get(seasonId);
+    const division = db.prepare("SELECT id FROM division WHERE season_id = ?").get(seasonId);
+    return {
+      conference: (conference as { id: number }).id,
+      division: (division as { id: number }).id,
+    };
+  }
+
+  function seasonIdOf(sequence: number): number {
+    return count("SELECT id AS total FROM season WHERE sequence = ?", sequence);
+  }
+
+  it("edits the first season until a later one is accepted, then refuses it", () => {
+    const id = readyLeague(CONFERENCES);
+    const old = listTeams(db, id)[0];
+    const oldGroups = groupIds(seasonIdOf(1));
+
+    expect(updateTeamField(db, old.id, "city", "Before")).toBe(true);
+    expect(renameConference(db, oldGroups.conference, "Before")).toBe(true);
+
+    startOffseason(db, id, 1);
+    const draftTeam = getOffseasonDraft(db, id)!.teams[0];
+    const draftGroups = groupIds(seasonIdOf(2));
+    // The draft is not current, so it is refused too.
+    expect(updateTeamField(db, draftTeam.id, "city", "Draft")).toBe(false);
+    expect(rerollTeamField(db, draftTeam.id, "nickname", seededRng(1))).toBeNull();
+    expect(renameConference(db, draftGroups.conference, "Draft")).toBe(false);
+    expect(renameDivision(db, draftGroups.division, "Draft")).toBe(false);
+
+    acceptOffseason(db, id);
+    const before = db.prepare("SELECT * FROM team_season WHERE id = ?").get(old.id);
+
+    expect(updateTeamField(db, old.id, "city", "After")).toBe(false);
+    expect(rerollTeamField(db, old.id, "nickname", seededRng(1))).toBeNull();
+    expect(renameConference(db, oldGroups.conference, "After")).toBe(false);
+    expect(renameDivision(db, oldGroups.division, "After")).toBe(false);
+    expect(db.prepare("SELECT * FROM team_season WHERE id = ?").get(old.id)).toEqual(before);
+    expect(
+      db.prepare("SELECT name FROM conference WHERE id = ?").get(oldGroups.conference),
+    ).toEqual({ name: "Before" });
+  });
+
+  it("still edits the new season's teams and groups after accepting", () => {
+    const id = readyLeague(CONFERENCES);
+    startOffseason(db, id, 1);
+    const draftGroups = groupIds(seasonIdOf(2));
+    acceptOffseason(db, id);
+
+    const [team] = listTeams(db, id);
+    expect(updateTeamField(db, team.id, "city", "Newtown")).toBe(true);
+    expect(rerollTeamField(db, team.id, "nickname", seededRng(1))).not.toBeNull();
+    expect(renameConference(db, draftGroups.conference, "Renamed")).toBe(true);
+    expect(renameDivision(db, draftGroups.division, "Renamed")).toBe(true);
+    expect(listTeams(db, id)[0].city).toBe("Newtown");
   });
 });

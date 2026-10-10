@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { getDb, openDatabase, transaction } from "@/lib/db";
 import { seededRng } from "@/lib/dice";
 import { createLeague, getLeague } from "@/lib/leagues";
-import { generateLeague, getGenerationRun } from "@/lib/runs";
+import { generateLeague, getSeasonRun } from "@/lib/runs";
 import { fillTeams, listTeams } from "@/lib/teams";
 
 let dir: string;
@@ -247,7 +247,7 @@ describe("openDatabase", () => {
         fgRange: null,
       }),
     ]);
-    expect(getGenerationRun(db, 1)?.entries).toHaveLength(1);
+    expect(getSeasonRun(db, 1)?.entries).toHaveLength(1);
     expect(generateLeague(db, 1, 7)).toEqual({ ok: false, reason: "already-generated" });
     expect(() =>
       db.exec("UPDATE team_season SET offense_profile = 'SPLENDID' WHERE id = 1"),

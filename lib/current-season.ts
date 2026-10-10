@@ -9,6 +9,14 @@ export const CURRENT_SEASON = `season.id = (
   WHERE c.league_id = season.league_id AND (c.sequence = 1 OR c.status = 'accepted')
   ORDER BY c.sequence DESC LIMIT 1)`;
 
+// The ids of every league's current season, for `season_id IN (...)` guards that
+// keep past seasons and off-season drafts read-only.
+export const CURRENT_SEASON_IDS = `SELECT season.id FROM season WHERE ${CURRENT_SEASON}`;
+
+export function isCurrentSeason(db: DatabaseSync, seasonId: number): boolean {
+  return db.prepare(`${CURRENT_SEASON_IDS} AND season.id = ?`).get(seasonId) !== undefined;
+}
+
 export function currentSeasonId(db: DatabaseSync, leagueId: number): number | undefined {
   const row = db
     .prepare(`SELECT season.id AS id FROM season WHERE season.league_id = ? AND ${CURRENT_SEASON}`)

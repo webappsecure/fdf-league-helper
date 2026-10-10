@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import { CURRENT_SEASON, currentSeasonId } from "@/lib/current-season";
+import { CURRENT_SEASON, CURRENT_SEASON_IDS, currentSeasonId } from "@/lib/current-season";
 import { transaction } from "@/lib/db";
 import type { Rng } from "@/lib/dice";
 import type { DivisionInput, LeagueSetupInput, XpKickDistance } from "@/lib/league-setup";
@@ -151,14 +151,19 @@ export function updateSeasonLabel(db: DatabaseSync, leagueId: number, label: str
   return Number(result.changes) > 0;
 }
 
-// Both return false when the conference or division does not exist.
+// Both return false when the conference or division does not exist or belongs to
+// a season that is not current.
 export function renameConference(db: DatabaseSync, id: number, name: string): boolean {
-  const result = db.prepare("UPDATE conference SET name = ? WHERE id = ?").run(name, id);
+  const result = db
+    .prepare(`UPDATE conference SET name = ? WHERE id = ? AND season_id IN (${CURRENT_SEASON_IDS})`)
+    .run(name, id);
   return Number(result.changes) > 0;
 }
 
 export function renameDivision(db: DatabaseSync, id: number, name: string): boolean {
-  const result = db.prepare("UPDATE division SET name = ? WHERE id = ?").run(name, id);
+  const result = db
+    .prepare(`UPDATE division SET name = ? WHERE id = ? AND season_id IN (${CURRENT_SEASON_IDS})`)
+    .run(name, id);
   return Number(result.changes) > 0;
 }
 

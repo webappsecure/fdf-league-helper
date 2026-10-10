@@ -6,7 +6,7 @@ import { LEAGUE_NAME_MAX, SEASON_LABEL_MAX } from "@/lib/league-setup";
 import { getLeague } from "@/lib/leagues";
 import { OFFSEASON_STEPS, OFFSEASON_STEP_HEADINGS } from "@/lib/offseason";
 import { getSeasonResults } from "@/lib/results";
-import { getGenerationRun } from "@/lib/runs";
+import { getSeasonRun } from "@/lib/runs";
 import { resolveView, type LeagueView } from "@/lib/summary";
 import { listTeams } from "@/lib/teams";
 import { AcceptLeague } from "./accept-league";
@@ -57,7 +57,7 @@ async function LeagueDetails({
   if (!league) notFound();
 
   const teams = listTeams(getDb(), league.id);
-  const run = getGenerationRun(getDb(), league.id);
+  const run = getSeasonRun(getDb(), league.id);
   const hasResults = getSeasonResults(getDb(), league.id).length > 0;
   const view = resolveView((await searchParams).view, league.status);
 
