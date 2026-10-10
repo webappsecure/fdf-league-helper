@@ -146,27 +146,44 @@ function findSeason(db: DatabaseSync, leagueId: number): SeasonRow | undefined {
     .get(leagueId) as SeasonRow | undefined;
 }
 
-// The saved results of the league's season; empty when none are saved.
-export function getSeasonResults(db: DatabaseSync, leagueId: number): TeamResult[] {
-  const rows = db
-    .prepare(
-      `SELECT season_result.team_season_id AS teamId, wins, losses, ties,
-              made_playoffs AS madePlayoffs, is_champion AS isChampion
-       FROM season_result
-       JOIN team_season ON team_season.id = season_result.team_season_id
-       JOIN season ON season.id = team_season.season_id
-       WHERE season.league_id = ? AND ${CURRENT_SEASON}
-       ORDER BY team_season.position`,
-    )
-    .all(leagueId) as (Omit<TeamResult, "madePlayoffs" | "isChampion"> & {
-    madePlayoffs: number;
-    isChampion: number;
-  })[];
+type ResultRow = Omit<TeamResult, "madePlayoffs" | "isChampion"> & {
+  madePlayoffs: number;
+  isChampion: number;
+};
+
+const RESULT_SELECT = `
+  SELECT season_result.team_season_id AS teamId, wins, losses, ties,
+         made_playoffs AS madePlayoffs, is_champion AS isChampion
+  FROM season_result
+  JOIN team_season ON team_season.id = season_result.team_season_id
+  JOIN season ON season.id = team_season.season_id`;
+
+function toResults(rows: ResultRow[]): TeamResult[] {
   return rows.map((row) => ({
     ...row,
     madePlayoffs: row.madePlayoffs === 1,
     isChampion: row.isChampion === 1,
   }));
+}
+
+// The saved results of the league's season; empty when none are saved.
+export function getSeasonResults(db: DatabaseSync, leagueId: number): TeamResult[] {
+  const rows = db
+    .prepare(
+      `${RESULT_SELECT}
+       WHERE season.league_id = ? AND ${CURRENT_SEASON}
+       ORDER BY team_season.position`,
+    )
+    .all(leagueId) as ResultRow[];
+  return toResults(rows);
+}
+
+// The saved results of one season, current or past.
+export function getResultsBySeason(db: DatabaseSync, seasonId: number): TeamResult[] {
+  const rows = db
+    .prepare(`${RESULT_SELECT} WHERE season.id = ? ORDER BY team_season.position`)
+    .all(seasonId) as ResultRow[];
+  return toResults(rows);
 }
 
 export type SaveResultsOutcome =

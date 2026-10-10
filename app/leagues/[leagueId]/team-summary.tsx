@@ -46,20 +46,30 @@ function Lines({ lines }: { lines: string[] | null }) {
 
 // Under a conference heading (h3) a panel title is an h4; with none it follows
 // the "Teams" h2 directly.
-function Panel({ summary, Heading }: { summary: TeamSummary; Heading: "h3" | "h4" }) {
+function Panel({
+  summary,
+  Heading,
+  readOnly,
+}: {
+  summary: TeamSummary;
+  Heading: "h3" | "h4";
+  readOnly: boolean;
+}) {
   const graded = summary.frontOfficeGrade !== null && summary.headCoachGrade !== null;
   const special = summary.fgRange !== null;
   return (
     <li className="rounded border border-border p-3">
       <div className="flex items-start justify-between gap-2">
         <Heading className="font-semibold">{summary.name}</Heading>
-        <Link
-          href="?view=detail"
-          aria-label={`Edit ${summary.name} in the detailed view`}
-          className="text-sm text-link underline"
-        >
-          Edit
-        </Link>
+        {!readOnly && (
+          <Link
+            href="?view=detail"
+            aria-label={`Edit ${summary.name} in the detailed view`}
+            className="text-sm text-link underline"
+          >
+            Edit
+          </Link>
+        )}
       </div>
       <dl className="mt-2 space-y-1 text-sm">
         <Row label="Head coach">{summary.coach}</Row>
@@ -89,7 +99,16 @@ function Panel({ summary, Heading }: { summary: TeamSummary; Heading: "h3" | "h4
   );
 }
 
-export function TeamSummaries({ league, teams }: { league: LeagueDetail; teams: Team[] }) {
+// With `readOnly`, a panel has no link to the editing view (a past season).
+export function TeamSummaries({
+  league,
+  teams,
+  readOnly = false,
+}: {
+  league: LeagueDetail;
+  teams: Team[];
+  readOnly?: boolean;
+}) {
   const Heading = league.conferences.length > 0 ? "h4" : "h3";
   return (
     <LeagueGroups league={league} teams={teams}>
@@ -99,7 +118,7 @@ export function TeamSummaries({ league, teams }: { league: LeagueDetail; teams: 
           className="mt-2 grid gap-3 sm:grid-cols-2"
         >
           {members.map((team) => (
-            <Panel key={team.id} summary={teamSummary(team)} Heading={Heading} />
+            <Panel key={team.id} summary={teamSummary(team)} Heading={Heading} readOnly={readOnly} />
           ))}
         </ul>
       )}

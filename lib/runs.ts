@@ -163,18 +163,13 @@ export function acceptLeague(db: DatabaseSync, leagueId: number): AcceptResult {
   });
 }
 
-export function getSeasonRun(db: DatabaseSync, leagueId: number): SeasonRun | null {
-  const run = db
-    .prepare(
-      `SELECT run.id AS id, run.kind AS kind, run.seed AS seed, run.created_at AS createdAt
-       FROM run
-       JOIN season ON season.id = run.season_id
-       WHERE season.league_id = ? AND ${CURRENT_SEASON}
-       ORDER BY run.id DESC LIMIT 1`,
-    )
-    .get(leagueId) as Omit<SeasonRun, "entries"> | undefined;
-  if (!run) return null;
+const RUN_SELECT = `
+  SELECT run.id AS id, run.kind AS kind, run.seed AS seed, run.created_at AS createdAt
+  FROM run
+  JOIN season ON season.id = run.season_id`;
 
+function withEntries(db: DatabaseSync, run: Omit<SeasonRun, "entries"> | undefined) {
+  if (!run) return null;
   const entries = db
     .prepare(
       `SELECT step, franchise_id AS franchiseId, message
@@ -182,4 +177,23 @@ export function getSeasonRun(db: DatabaseSync, leagueId: number): SeasonRun | nu
     )
     .all(run.id) as RunLogLine[];
   return { ...run, entries };
+}
+
+export function getSeasonRun(db: DatabaseSync, leagueId: number): SeasonRun | null {
+  const run = db
+    .prepare(
+      `${RUN_SELECT}
+       WHERE season.league_id = ? AND ${CURRENT_SEASON}
+       ORDER BY run.id DESC LIMIT 1`,
+    )
+    .get(leagueId) as Omit<SeasonRun, "entries"> | undefined;
+  return withEntries(db, run);
+}
+
+// The run that made one season, current or past.
+export function getRunBySeason(db: DatabaseSync, seasonId: number): SeasonRun | null {
+  const run = db
+    .prepare(`${RUN_SELECT} WHERE season.id = ? ORDER BY run.id DESC LIMIT 1`)
+    .get(seasonId) as Omit<SeasonRun, "entries"> | undefined;
+  return withEntries(db, run);
 }

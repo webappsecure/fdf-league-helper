@@ -174,6 +174,14 @@ export function listTeams(db: DatabaseSync, leagueId: number): Team[] {
   return rows.map(toTeam);
 }
 
+// The teams of one season, current or past.
+export function listSeasonTeams(db: DatabaseSync, seasonId: number): Team[] {
+  const rows = db
+    .prepare(`${TEAM_SELECT} WHERE team_season.season_id = ? ORDER BY team_season.position`)
+    .all(seasonId) as TeamRow[];
+  return rows.map(toTeam);
+}
+
 // Returns false when the team does not exist or is not in its league's current
 // season: past seasons and drafts are read-only.
 export function updateTeamField(

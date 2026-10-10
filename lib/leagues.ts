@@ -102,12 +102,7 @@ export function listLeagues(db: DatabaseSync): LeagueSummary[] {
   }));
 }
 
-export function getLeague(db: DatabaseSync, id: number): LeagueDetail | null {
-  const row = db.prepare(`${SUMMARY_SELECT} WHERE league.id = ?`).get(id) as
-    | SummaryRow
-    | undefined;
-  if (!row) return null;
-
+function detailOf(db: DatabaseSync, row: SummaryRow): LeagueDetail {
   const conferences = db
     .prepare("SELECT id, name FROM conference WHERE season_id = ? ORDER BY position")
     .all(row.seasonId) as { id: number; name: string }[];
@@ -136,6 +131,55 @@ export function getLeague(db: DatabaseSync, id: number): LeagueDetail | null {
     })),
     divisions: divisionsOf(null),
   };
+}
+
+export function getLeague(db: DatabaseSync, id: number): LeagueDetail | null {
+  const row = db.prepare(`${SUMMARY_SELECT} WHERE league.id = ?`).get(id) as
+    | SummaryRow
+    | undefined;
+  return row ? detailOf(db, row) : null;
+}
+
+export type AcceptedSeason = {
+  seasonId: number;
+  sequence: number;
+  label: string;
+  isCurrent: boolean;
+};
+
+// The league's accepted seasons, newest first. A draft is not history.
+export function listAcceptedSeasons(db: DatabaseSync, leagueId: number): AcceptedSeason[] {
+  const rows = db
+    .prepare(
+      `SELECT season.id AS seasonId, season.sequence AS sequence, season.label AS label,
+              ${CURRENT_SEASON} AS isCurrent
+       FROM season
+       WHERE season.league_id = ? AND season.status = 'accepted'
+       ORDER BY season.sequence DESC`,
+    )
+    .all(leagueId) as (Omit<AcceptedSeason, "isCurrent"> & { isCurrent: number })[];
+  return rows.map((row) => ({ ...row, isCurrent: row.isCurrent === 1 }));
+}
+
+// One accepted season of a league, as the league looked in it: that season's
+// label, kick distance, conferences and divisions. Null for an unknown league
+// or sequence, and for a season that is not accepted.
+export function getSeasonLeague(
+  db: DatabaseSync,
+  leagueId: number,
+  sequence: number,
+): (LeagueDetail & { seasonId: number; sequence: number }) | null {
+  const row = db
+    .prepare(
+      `SELECT league.id AS id, league.name AS name, season.id AS seasonId,
+              season.label AS seasonLabel, season.team_count AS teamCount,
+              season.xp_kick_distance AS xpKickDistance, season.status AS status
+       FROM league
+       JOIN season ON season.league_id = league.id
+       WHERE league.id = ? AND season.sequence = ? AND season.status = 'accepted'`,
+    )
+    .get(leagueId, sequence) as SummaryRow | undefined;
+  return row ? { ...detailOf(db, row), seasonId: row.seasonId, sequence } : null;
 }
 
 // Both return false when the league does not exist.
